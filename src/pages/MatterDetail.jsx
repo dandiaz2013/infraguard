@@ -38,7 +38,7 @@ export default function MatterDetail() {
     enabled: !!matterId
   });
 
-  const { data: arguments = [] } = useQuery({
+  const { data: legalArguments = [] } = useQuery({
     queryKey: ['arguments', matterId],
     queryFn: () => base44.entities.Argument.filter({ matter_id: matterId }),
     enabled: !!matterId
@@ -155,7 +155,7 @@ export default function MatterDetail() {
             </TabsTrigger>
             <TabsTrigger value="arguments">
               <Scale className="h-4 w-4 mr-2" />
-              Arguments ({arguments.length})
+              Arguments ({legalArguments.length})
             </TabsTrigger>
             <TabsTrigger value="documents">
               <FileText className="h-4 w-4 mr-2" />
@@ -247,7 +247,7 @@ export default function MatterDetail() {
               </Link>
             </div>
 
-            {arguments.length === 0 ? (
+            {legalArguments.length === 0 ? (
               <Card>
                 <CardContent className="p-8 text-center">
                   <Scale className="h-12 w-12 text-slate-300 mx-auto mb-3" />
@@ -256,7 +256,7 @@ export default function MatterDetail() {
               </Card>
             ) : (
               <div className="space-y-4">
-                {arguments.map((arg) => (
+                {legalArguments.map((arg) => (
                   <Card key={arg.id} className="shadow-sm">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between mb-3">
