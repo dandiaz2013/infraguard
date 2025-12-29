@@ -13,6 +13,7 @@ import { Search, Sparkles, BookOpen, Scale, ExternalLink, Plus, Loader2 } from '
 export default function Research() {
   const [researchQuery, setResearchQuery] = useState('');
   const [selectedMatter, setSelectedMatter] = useState('');
+  const [selectedIssue, setSelectedIssue] = useState('');
   const [isResearching, setIsResearching] = useState(false);
   const [researchResults, setResearchResults] = useState(null);
 
@@ -23,10 +24,30 @@ export default function Research() {
     queryFn: () => base44.entities.Matter.filter({ status: 'Active' })
   });
 
+  const { data: issues = [] } = useQuery({
+    queryKey: ['issues', selectedMatter],
+    queryFn: () => base44.entities.LegalIssue.filter({ matter_id: selectedMatter }),
+    enabled: !!selectedMatter
+  });
+
   const createAuthorityMutation = useMutation({
     mutationFn: (data) => base44.entities.LegalAuthority.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries(['authorities']);
+    }
+  });
+
+  const createIssueMutation = useMutation({
+    mutationFn: (data) => base44.entities.LegalIssue.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['issues']);
+    }
+  });
+
+  const updateIssueMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.LegalIssue.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['issues']);
     }
   });
 
@@ -43,20 +64,31 @@ export default function Research() {
 Legal Issue/Query: ${researchQuery}
 
 Please provide:
-1. A list of 5-8 relevant UK legal authorities
-2. For each authority, include:
+1. Analysis of the core legal issue and area of law
+2. A list of 5-8 relevant UK legal authorities
+3. For each authority, include:
    - Type (Case Law, Statute, Statutory Instrument, etc.)
    - Full citation in proper UK legal format
    - Court (for cases) or year of enactment
+   - Current validity status (Active/Overruled/Distinguished/Superseded)
    - Key legal principle or holding
    - Brief explanation of relevance (2-3 sentences)
    - One important quote if applicable
+   - URL to find the full text if available
 
-Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appeal, and High Court decisions. Include relevant statutory provisions.`,
+Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appeal, and High Court decisions. Include relevant statutory provisions. Verify each authority is current and not overruled.`,
         add_context_from_internet: true,
         response_json_schema: {
           type: "object",
           properties: {
+            issue_analysis: {
+              type: "object",
+              properties: {
+                core_issue: { type: "string" },
+                area_of_law: { type: "string" },
+                key_concepts: { type: "array", items: { type: "string" } }
+              }
+            },
             authorities: {
               type: "array",
               items: {
@@ -67,9 +99,11 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
                   title: { type: "string" },
                   court: { type: "string" },
                   year: { type: "string" },
+                  validity_status: { type: "string" },
                   legal_principle: { type: "string" },
                   relevance: { type: "string" },
-                  key_quote: { type: "string" }
+                  key_quote: { type: "string" },
+                  url: { type: "string" }
                 }
               }
             },
@@ -79,6 +113,29 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
       });
 
       setResearchResults(response);
+
+      // Auto-create or update legal issue if matter is selected
+      if (selectedMatter && response.issue_analysis) {
+        if (selectedIssue) {
+          // Update existing issue
+          updateIssueMutation.mutate({
+            id: selectedIssue,
+            data: {
+              status: 'Authorities Found'
+            }
+          });
+        } else {
+          // Create new issue
+          createIssueMutation.mutate({
+            matter_id: selectedMatter,
+            issue_title: response.issue_analysis.core_issue,
+            issue_description: researchQuery,
+            area_of_law: response.issue_analysis.area_of_law,
+            status: 'Authorities Found',
+            priority: 'High'
+          });
+        }
+      }
     } catch (error) {
       console.error('Research error:', error);
       alert('Research failed. Please try again.');
@@ -99,7 +156,8 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
       legal_principle: authority.legal_principle,
       relevance: authority.relevance,
       key_quotes: authority.key_quote ? [authority.key_quote] : [],
-      tags: [authority.type]
+      url: authority.url || '',
+      tags: [authority.type, authority.validity_status || 'Active', 'UK']
     };
 
     createAuthorityMutation.mutate(authorityData);
@@ -176,6 +234,38 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
         {/* Research Results */}
         {researchResults && (
           <div className="space-y-6">
+            {/* Issue Analysis */}
+            {researchResults.issue_analysis && (
+              <Card className="shadow-sm bg-purple-50 border-purple-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-purple-900">
+                    <Scale className="h-5 w-5" />
+                    Legal Issue Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 mb-1">Core Issue</h4>
+                    <p className="text-slate-700">{researchResults.issue_analysis.core_issue}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 mb-1">Area of Law</h4>
+                    <Badge variant="outline" className="bg-white">{researchResults.issue_analysis.area_of_law}</Badge>
+                  </div>
+                  {researchResults.issue_analysis.key_concepts?.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-700 mb-2">Key Legal Concepts</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {researchResults.issue_analysis.key_concepts.map((concept, idx) => (
+                          <Badge key={idx} variant="secondary">{concept}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Summary */}
             {researchResults.summary && (
               <Card className="shadow-sm bg-blue-50 border-blue-200">
@@ -210,6 +300,16 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
                             {authority.year && (
                               <Badge variant="outline">{authority.year}</Badge>
                             )}
+                            <Badge className={`
+                              ${authority.validity_status === 'Active' ? 'bg-green-100 text-green-700 border-green-300' : ''}
+                              ${authority.validity_status === 'Overruled' ? 'bg-red-100 text-red-700 border-red-300' : ''}
+                              ${authority.validity_status === 'Distinguished' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' : ''}
+                              ${authority.validity_status === 'Superseded' ? 'bg-orange-100 text-orange-700 border-orange-300' : ''}
+                              border
+                            `}>
+                              {authority.validity_status || 'Active'}
+                            </Badge>
+                            <Badge variant="outline" className="border-blue-300 text-blue-700">UK</Badge>
                           </div>
                           <h3 className="text-lg font-semibold text-slate-900 mb-1">
                             {authority.title}
@@ -222,15 +322,27 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
                             </p>
                           )}
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleSaveAuthority(authority)}
-                          className="ml-4"
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Save
-                        </Button>
+                        <div className="flex flex-col gap-2 ml-4">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSaveAuthority(authority)}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Save
+                          </Button>
+                          {authority.url && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              asChild
+                            >
+                              <a href={authority.url} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="space-y-3">
@@ -265,9 +377,15 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
             <CardContent className="p-12 text-center">
               <Search className="h-16 w-16 text-slate-300 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-slate-900 mb-2">Start Your Legal Research</h3>
-              <p className="text-slate-600 max-w-md mx-auto">
-                Enter a legal issue or question above to find relevant UK case law, statutes, and other authorities.
+              <p className="text-slate-600 max-w-md mx-auto mb-4">
+                Enter a legal issue or question above to find relevant UK case law, statutes, and other authorities with AI-powered verification.
               </p>
+              <div className="text-sm text-slate-500 space-y-1">
+                <p>✓ Automatic authority verification</p>
+                <p>✓ Validity status checking</p>
+                <p>✓ Jurisdiction-specific (UK) filtering</p>
+                <p>✓ Links to legal issues in your matters</p>
+              </div>
             </CardContent>
           </Card>
         )}

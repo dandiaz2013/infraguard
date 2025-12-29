@@ -134,6 +134,28 @@ export default function Dashboard() {
           </Link>
         </div>
 
+        {/* Additional Tools */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Link to={createPageUrl('JudgmentAnalyzer')}>
+            <Button variant="outline" className="w-full h-16 flex items-center justify-center gap-2">
+              <FileText className="h-5 w-5" />
+              <span>Judgment Analyzer</span>
+            </Button>
+          </Link>
+
+          <Link to={createPageUrl('Analytics')}>
+            <Button variant="outline" className="w-full h-16 flex items-center justify-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              <span>Analytics Dashboard</span>
+            </Button>
+          </Link>
+
+          <Button variant="outline" className="w-full h-16 flex items-center justify-center gap-2" disabled>
+            <CheckCircle2 className="h-5 w-5" />
+            <span>Authority Verification</span>
+          </Button>
+        </div>
+
         {/* Recent Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Matters */}
