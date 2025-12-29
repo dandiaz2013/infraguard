@@ -6,6 +6,7 @@ import ArgumentBuilder from './pages/ArgumentBuilder';
 import DocumentGenerator from './pages/DocumentGenerator';
 import Analytics from './pages/Analytics';
 import JudgmentAnalyzer from './pages/JudgmentAnalyzer';
+import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
@@ -22,4 +23,5 @@ export const PAGES = {
 export const pagesConfig = {
     mainPage: "Dashboard",
     Pages: PAGES,
+    Layout: __Layout,
 };
