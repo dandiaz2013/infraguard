@@ -183,7 +183,10 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="matter">Link to Matter (Optional)</Label>
-              <Select value={selectedMatter} onValueChange={setSelectedMatter}>
+              <Select value={selectedMatter} onValueChange={(v) => {
+                setSelectedMatter(v);
+                setSelectedIssue('');
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a matter..." />
                 </SelectTrigger>
@@ -197,6 +200,25 @@ Focus on recent and binding authorities. Prioritize Supreme Court, Court of Appe
                 </SelectContent>
               </Select>
             </div>
+
+            {selectedMatter && issues.length > 0 && (
+              <div>
+                <Label htmlFor="issue">Link to Legal Issue (Optional)</Label>
+                <Select value={selectedIssue} onValueChange={setSelectedIssue}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an issue or create new..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={null}>Create New Issue</SelectItem>
+                    {issues.map((issue) => (
+                      <SelectItem key={issue.id} value={issue.id}>
+                        {issue.issue_title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="query">Legal Issue or Question</Label>

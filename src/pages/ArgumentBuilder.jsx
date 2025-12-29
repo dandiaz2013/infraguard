@@ -66,74 +66,28 @@ export default function ArgumentBuilder() {
         : '';
 
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a UK legal expert drafting a comprehensive legal argument for ${position}.
+        prompt: `You are a UK legal expert. Draft a comprehensive legal argument for ${position}.
 
-Facts:
-${factPattern}
+Facts: ${factPattern}
 ${issueContext}
 ${authoritiesContext}
 
-Draft a detailed, persuasive legal argument including:
+Create a detailed legal argument in markdown format with:
+1. Issues identification
+2. Legal framework and principles
+3. Detailed legal analysis
+4. Application to facts
+5. Counter-arguments
+6. Conclusion
 
-1. STATEMENT OF ISSUES
-   - Clear identification of legal questions
-
-2. LEGAL FRAMEWORK
-   - Relevant statutes, regulations, and legal principles
-   - Applicable tests and standards
-
-3. DETAILED ARGUMENT
-   - Step-by-step legal analysis
-   - Application of authorities to facts
-   - Proper citation format (UK style)
-   - Address each element/requirement
-   
-4. PROPOSITIONS
-   - Clear legal propositions
-   - Supporting authorities for each
-
-5. FACTUAL APPLICATION
-   - How the law applies to these specific facts
-   - Distinguish unfavorable authorities
-   - Strengthen favorable authorities
-
-6. COUNTER-ARGUMENTS
-   - Anticipate opposing arguments
-   - Provide rebuttals
-
-7. CONCLUSION
-   - Summary of argument
-   - Relief/remedy sought
-
-Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.`,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            issues: { type: "array", items: { type: "string" } },
-            legal_framework: { type: "string" },
-            detailed_argument: { type: "string" },
-            propositions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  proposition: { type: "string" },
-                  supporting_authorities: { type: "array", items: { type: "string" } }
-                }
-              }
-            },
-            counter_arguments: { type: "string" },
-            conclusion: { type: "string" },
-            full_argument_markdown: { type: "string" }
-          }
-        }
+Format the output as a complete markdown document ready for use.`,
+        add_context_from_internet: true
       });
 
-      setGeneratedArgument(result);
+      setGeneratedArgument({ full_argument_markdown: result });
     } catch (error) {
       console.error('Generation error:', error);
-      alert('Argument generation failed. Please try again.');
+      alert(`Argument generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -145,14 +99,16 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
       return;
     }
 
+    const firstLine = generatedArgument.full_argument_markdown?.split('\n')[0] || 'Legal Argument';
+
     saveArgumentMutation.mutate({
       matter_id: selectedMatter,
       issue_id: selectedIssue || undefined,
-      argument_title: generatedArgument.issues?.[0] || 'Legal Argument',
+      argument_title: firstLine.replace(/^#+ /, '').substring(0, 100),
       position: position,
-      proposition: generatedArgument.propositions?.[0]?.proposition || '',
-      reasoning: generatedArgument.detailed_argument || '',
-      counter_arguments: generatedArgument.counter_arguments || '',
+      proposition: generatedArgument.full_argument_markdown?.substring(0, 500) || '',
+      reasoning: generatedArgument.full_argument_markdown || '',
+      counter_arguments: '',
       authorities: authorities.map(a => a.id),
       order_index: 1
     });
@@ -291,31 +247,9 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
                 </div>
               )}
 
-              {generatedArgument && (
-                <div className="space-y-4">
-                  <div className="prose prose-slate max-w-none bg-white p-6 rounded-lg border">
-                    <ReactMarkdown>{generatedArgument.full_argument_markdown}</ReactMarkdown>
-                  </div>
-
-                  {generatedArgument.propositions?.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">Key Propositions</h3>
-                      <div className="space-y-3">
-                        {generatedArgument.propositions.map((prop, idx) => (
-                          <div key={idx} className="bg-blue-50 p-4 rounded-lg">
-                            <p className="text-sm font-medium text-slate-900 mb-2">{prop.proposition}</p>
-                            {prop.supporting_authorities?.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {prop.supporting_authorities.map((auth, i) => (
-                                  <Badge key={i} variant="outline" className="text-xs">{auth}</Badge>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              {generatedArgument && generatedArgument.full_argument_markdown && (
+                <div className="prose prose-slate max-w-none bg-white p-6 rounded-lg border overflow-y-auto max-h-[700px]">
+                  <ReactMarkdown>{generatedArgument.full_argument_markdown}</ReactMarkdown>
                 </div>
               )}
             </CardContent>
