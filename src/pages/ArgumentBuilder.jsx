@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Scale, Loader2, Plus, Sparkles } from 'lucide-react';
+import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 export default function ArgumentBuilder() {
@@ -23,6 +23,9 @@ export default function ArgumentBuilder() {
   const [position, setPosition] = useState('Claimant');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedArgument, setGeneratedArgument] = useState(null);
+  const [uploadedDocuments, setUploadedDocuments] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isCorrectingFacts, setIsCorrectingFacts] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -58,6 +61,49 @@ export default function ArgumentBuilder() {
       setFactPattern(currentMatter.description || '');
     }
   }, [currentMatter]);
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      const uploadedDocs = [];
+      
+      for (const file of files) {
+        const uploadResult = await base44.integrations.Core.UploadFile({ file });
+        
+        const extractResult = await base44.integrations.Core.ExtractDataFromUploadedFile({
+          file_url: uploadResult.file_url,
+          json_schema: {
+            type: "object",
+            properties: {
+              full_text: { type: "string" }
+            }
+          }
+        });
+
+        if (extractResult.status === 'success' && extractResult.output?.full_text) {
+          uploadedDocs.push({
+            name: file.name,
+            url: uploadResult.file_url,
+            content: extractResult.output.full_text
+          });
+        }
+      }
+
+      setUploadedDocuments([...uploadedDocuments, ...uploadedDocs]);
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload documents');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeDocument = (index) => {
+    setUploadedDocuments(uploadedDocuments.filter((_, i) => i !== index));
+  };
 
   const saveArgumentMutation = useMutation({
     mutationFn: (data) => base44.entities.Argument.create(data),
@@ -96,6 +142,12 @@ ${proceduralHistory ? `\n### Procedural History:\n${proceduralHistory}` : ''}
 ${lossHarmRisk ? `\n### Loss, Harm, or Risk:\n${lossHarmRisk}` : ''}
       `.trim();
 
+      const documentsContext = uploadedDocuments.length > 0
+        ? `\n\n## Uploaded Documents\n${uploadedDocuments.map((doc, idx) => 
+            `### Document ${idx + 1}: ${doc.name}\n${doc.content.substring(0, 3000)}`
+          ).join('\n\n')}`
+        : '';
+
       const result = await base44.integrations.Core.InvokeLLM({
         prompt: `You are JurisAI, a UK legal reasoning assistant. Draft a structured court-ready legal argument for ${position}.
 
@@ -110,6 +162,7 @@ ${factPattern}
 ${expandedFacts ? `## Fact Pattern Expansion (User-Provided Detail)\n${expandedFacts}` : ''}
 ${issueContext}
 ${authoritiesContext}
+${documentsContext}
 
 ## Instructions to AI
 When generating arguments:
@@ -158,6 +211,44 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
       alert(`Argument generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleCorrectFacts = async () => {
+    if (!generatedArgument) {
+      alert('Generate an argument first');
+      return;
+    }
+
+    setIsCorrectingFacts(true);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a UK legal fact-checker. Review the following legal argument and identify any factual inaccuracies, unsupported claims, or errors in legal reasoning.
+
+## Generated Argument
+${generatedArgument.full_argument_markdown}
+
+## Original Facts
+${factPattern}
+
+## Task
+1. Identify any factual errors or unsupported claims
+2. Check if legal principles are correctly stated
+3. Verify case citations if any
+4. Flag any logical inconsistencies
+5. Provide corrected version if errors found
+
+Return the corrected argument with all factual errors fixed. If no errors, return the original argument with a note that it's accurate.`,
+        add_context_from_internet: true
+      });
+
+      setGeneratedArgument({ full_argument_markdown: result });
+      alert('Facts reviewed and corrected');
+    } catch (error) {
+      console.error('Correction error:', error);
+      alert('Failed to correct facts');
+    } finally {
+      setIsCorrectingFacts(false);
     }
   };
 
@@ -257,6 +348,39 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
                   rows={5}
                   className="text-sm bg-slate-50"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="documents">📎 Upload Documents (Optional)</Label>
+                <div className="mt-2 space-y-2">
+                  <input
+                    id="documents"
+                    type="file"
+                    multiple
+                    accept=".pdf,.txt,.doc,.docx"
+                    onChange={handleFileUpload}
+                    disabled={isUploading}
+                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                  {isUploading && (
+                    <p className="text-xs text-slate-500">Uploading and processing...</p>
+                  )}
+                  {uploadedDocuments.length > 0 && (
+                    <div className="space-y-2">
+                      {uploadedDocuments.map((doc, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-green-50 border border-green-200 rounded p-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-green-700" />
+                            <span className="text-xs text-green-900">{doc.name}</span>
+                          </div>
+                          <button onClick={() => removeDocument(idx)} className="text-green-700 hover:text-green-900">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="border-t pt-4 space-y-3">
@@ -370,10 +494,20 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
               <div className="flex items-center justify-between">
                 <CardTitle>Generated Argument</CardTitle>
                 {generatedArgument && (
-                  <Button size="sm" onClick={handleSave}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Save
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={handleCorrectFacts} disabled={isCorrectingFacts}>
+                      {isCorrectingFacts ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                      )}
+                      Correct Facts
+                    </Button>
+                    <Button size="sm" onClick={handleSave}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Save
+                    </Button>
+                  </div>
                 )}
               </div>
             </CardHeader>
