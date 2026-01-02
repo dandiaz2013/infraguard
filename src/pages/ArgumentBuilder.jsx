@@ -14,6 +14,12 @@ export default function ArgumentBuilder() {
   const [selectedMatter, setSelectedMatter] = useState('');
   const [selectedIssue, setSelectedIssue] = useState('');
   const [factPattern, setFactPattern] = useState('');
+  const [chronology, setChronology] = useState('');
+  const [disputedFacts, setDisputedFacts] = useState('');
+  const [undisputedFacts, setUndisputedFacts] = useState('');
+  const [legalIssuesRaised, setLegalIssuesRaised] = useState('');
+  const [proceduralHistory, setProceduralHistory] = useState('');
+  const [lossHarmRisk, setLossHarmRisk] = useState('');
   const [position, setPosition] = useState('Claimant');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedArgument, setGeneratedArgument] = useState(null);
@@ -23,6 +29,15 @@ export default function ArgumentBuilder() {
   const { data: matters = [] } = useQuery({
     queryKey: ['matters'],
     queryFn: () => base44.entities.Matter.filter({ status: 'Active' })
+  });
+
+  const { data: currentMatter } = useQuery({
+    queryKey: ['matter', selectedMatter],
+    queryFn: async () => {
+      const matters = await base44.entities.Matter.filter({ id: selectedMatter });
+      return matters[0];
+    },
+    enabled: !!selectedMatter
   });
 
   const { data: issues = [] } = useQuery({
@@ -36,6 +51,13 @@ export default function ArgumentBuilder() {
     queryFn: () => base44.entities.LegalAuthority.filter({ matter_id: selectedMatter }),
     enabled: !!selectedMatter
   });
+
+  // Auto-populate fact pattern when matter changes
+  React.useEffect(() => {
+    if (currentMatter) {
+      setFactPattern(currentMatter.description || '');
+    }
+  }, [currentMatter]);
 
   const saveArgumentMutation = useMutation({
     mutationFn: (data) => base44.entities.Argument.create(data),
@@ -65,22 +87,68 @@ export default function ArgumentBuilder() {
         ? `\n\nLegal Issue: ${issues.find(i => i.id === selectedIssue)?.issue_title || ''}`
         : '';
 
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a UK legal expert. Draft a comprehensive legal argument for ${position}.
+      const expandedFacts = `
+${chronology ? `\n### Chronology (Key Events):\n${chronology}` : ''}
+${disputedFacts ? `\n### Disputed Facts:\n${disputedFacts}` : ''}
+${undisputedFacts ? `\n### Undisputed Facts:\n${undisputedFacts}` : ''}
+${legalIssuesRaised ? `\n### Legal Issues Raised:\n${legalIssuesRaised}` : ''}
+${proceduralHistory ? `\n### Procedural History:\n${proceduralHistory}` : ''}
+${lossHarmRisk ? `\n### Loss, Harm, or Risk:\n${lossHarmRisk}` : ''}
+      `.trim();
 
-Facts: ${factPattern}
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are JurisAI, a UK legal reasoning assistant. Draft a structured court-ready legal argument for ${position}.
+
+## Matter Context
+**Matter:** ${currentMatter?.matter_name || ''}
+**Court:** ${currentMatter?.court || 'N/A'}
+**Matter Type:** ${currentMatter?.matter_type || 'N/A'}
+
+## Core Fact Pattern (Auto-Populated from Matter)
+${factPattern}
+
+${expandedFacts ? `## Fact Pattern Expansion (User-Provided Detail)\n${expandedFacts}` : ''}
 ${issueContext}
 ${authoritiesContext}
 
-Create a detailed legal argument in markdown format with:
-1. Issues identification
-2. Legal framework and principles
-3. Detailed legal analysis
-4. Application to facts
-5. Counter-arguments
-6. Conclusion
+## Instructions to AI
+When generating arguments:
+- Treat auto-populated Matter facts as accurate unless contradicted
+- Prioritise user-added expansions
+- Identify legally material facts
+- Ignore emotional language unless legally relevant
+- Structure arguments clearly with headings and sub-points
+- Where appropriate, flag factual gaps or evidential weaknesses
 
-Format the output as a complete markdown document ready for use.`,
+## Output Requirements
+Generate a professional, court-ready legal argument with:
+
+1. **STATEMENT OF ISSUES**
+   - Clear identification of legal questions
+
+2. **LEGAL FRAMEWORK**
+   - Relevant statutes and legal principles
+   - Applicable tests and standards
+
+3. **FACTUAL MATRIX**
+   - Key material facts
+   - Timeline if relevant
+
+4. **DETAILED ARGUMENT**
+   - Step-by-step legal analysis
+   - Application of authorities to facts
+   - Proper UK citation format
+   - Address each element/requirement
+
+5. **COUNTER-ARGUMENTS & REBUTTAL**
+   - Anticipate opposing arguments
+   - Provide clear rebuttals
+
+6. **CONCLUSION & RELIEF SOUGHT**
+   - Summary of argument
+   - Remedies requested
+
+Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.`,
         add_context_from_internet: true
       });
 
