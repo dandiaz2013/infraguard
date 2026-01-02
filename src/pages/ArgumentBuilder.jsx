@@ -199,7 +199,7 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
                 Argument Configuration
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 max-h-[750px] overflow-y-auto">
               <div>
                 <Label htmlFor="matter">Matter *</Label>
                 <Select value={selectedMatter} onValueChange={(v) => {
@@ -219,25 +219,6 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
                 </Select>
               </div>
 
-              {selectedMatter && issues.length > 0 && (
-                <div>
-                  <Label htmlFor="issue">Legal Issue (Optional)</Label>
-                  <Select value={selectedIssue} onValueChange={setSelectedIssue}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select issue..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={null}>None</SelectItem>
-                      {issues.map((issue) => (
-                        <SelectItem key={issue.id} value={issue.id}>
-                          {issue.issue_title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
               <div>
                 <Label htmlFor="position">Position *</Label>
                 <Select value={position} onValueChange={setPosition}>
@@ -253,16 +234,105 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
                 </Select>
               </div>
 
+              {currentMatter && (
+                <div className="bg-slate-100 border border-slate-300 rounded-lg p-4 space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-900">📋 Matter Overview (Read Only)</h3>
+                  <div className="text-xs text-slate-700 space-y-1">
+                    <p><span className="font-medium">Matter:</span> {currentMatter.matter_name}</p>
+                    <p><span className="font-medium">Client:</span> {currentMatter.client_name}</p>
+                    {currentMatter.court && <p><span className="font-medium">Court:</span> {currentMatter.court}</p>}
+                    <p><span className="font-medium">Type:</span> {currentMatter.matter_type}</p>
+                    <p><span className="font-medium">Status:</span> {currentMatter.status}</p>
+                  </div>
+                </div>
+              )}
+
               <div>
-                <Label htmlFor="facts">Fact Pattern *</Label>
+                <Label htmlFor="facts">Core Fact Pattern (Auto-Populated) *</Label>
                 <Textarea
                   id="facts"
-                  placeholder="Describe the key facts, issues, and legal questions. Include relevant dates, parties, and circumstances. The more detail you provide, the stronger the argument."
+                  placeholder="This auto-populates from Matter. Edit as needed."
                   value={factPattern}
                   onChange={(e) => setFactPattern(e.target.value)}
-                  rows={12}
-                  className="font-mono text-sm"
+                  rows={5}
+                  className="text-sm bg-slate-50"
                 />
+              </div>
+
+              <div className="border-t pt-4 space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900">📝 Fact Pattern Expansion (Optional)</h3>
+                
+                <div>
+                  <Label htmlFor="chronology" className="text-xs">Chronology (Key Events)</Label>
+                  <Textarea
+                    id="chronology"
+                    placeholder="- Event 1&#10;- Event 2"
+                    value={chronology}
+                    onChange={(e) => setChronology(e.target.value)}
+                    rows={3}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="disputed" className="text-xs">Disputed Facts</Label>
+                  <Textarea
+                    id="disputed"
+                    placeholder="Facts contested by parties..."
+                    value={disputedFacts}
+                    onChange={(e) => setDisputedFacts(e.target.value)}
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="undisputed" className="text-xs">Undisputed Facts</Label>
+                  <Textarea
+                    id="undisputed"
+                    placeholder="Facts agreed by all parties..."
+                    value={undisputedFacts}
+                    onChange={(e) => setUndisputedFacts(e.target.value)}
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="legal_issues" className="text-xs">Legal Issues Raised</Label>
+                  <Textarea
+                    id="legal_issues"
+                    placeholder="Key legal questions..."
+                    value={legalIssuesRaised}
+                    onChange={(e) => setLegalIssuesRaised(e.target.value)}
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="procedural" className="text-xs">Procedural History</Label>
+                  <Textarea
+                    id="procedural"
+                    placeholder="Previous hearings, orders..."
+                    value={proceduralHistory}
+                    onChange={(e) => setProceduralHistory(e.target.value)}
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="loss" className="text-xs">Loss, Harm, or Risk</Label>
+                  <Textarea
+                    id="loss"
+                    placeholder="Damages, injury, harm..."
+                    value={lossHarmRisk}
+                    onChange={(e) => setLossHarmRisk(e.target.value)}
+                    rows={2}
+                    className="text-sm"
+                  />
+                </div>
               </div>
 
               {selectedMatter && authorities.length > 0 && (
