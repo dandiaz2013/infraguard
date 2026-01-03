@@ -98,14 +98,14 @@ export default function ArgumentBuilder() {
 
     setIsLoadingLastVersion(true);
     try {
-      const arguments = await base44.entities.Argument.filter(
+      const savedArguments = await base44.entities.Argument.filter(
         { matter_id: selectedMatter },
         '-version_number',
         1
       );
 
-      if (arguments.length > 0) {
-        const lastVersion = arguments[0];
+      if (savedArguments.length > 0) {
+        const lastVersion = savedArguments[0];
         setCurrentArgumentVersion(lastVersion);
         setFactPattern(lastVersion.fact_pattern || '');
         setPosition(lastVersion.position);
