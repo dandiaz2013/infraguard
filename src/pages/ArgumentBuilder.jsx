@@ -26,6 +26,9 @@ export default function ArgumentBuilder() {
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isCorrectingFacts, setIsCorrectingFacts] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [currentArgumentVersion, setCurrentArgumentVersion] = useState(null);
+  const [isLoadingLastVersion, setIsLoadingLastVersion] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -55,12 +58,79 @@ export default function ArgumentBuilder() {
     enabled: !!selectedMatter
   });
 
-  // Auto-populate fact pattern when matter changes
+  // Load last saved argument version when matter changes
   React.useEffect(() => {
-    if (currentMatter) {
+    if (selectedMatter) {
+      loadLastArgumentVersion();
+    }
+  }, [selectedMatter]);
+
+  // Auto-populate fact pattern when matter changes (if no saved version)
+  React.useEffect(() => {
+    if (currentMatter && !currentArgumentVersion) {
       setFactPattern(currentMatter.description || '');
     }
-  }, [currentMatter]);
+  }, [currentMatter, currentArgumentVersion]);
+
+  // Detect unsaved changes
+  React.useEffect(() => {
+    if (generatedArgument) {
+      setHasUnsavedChanges(true);
+    }
+  }, [generatedArgument]);
+
+  // Block navigation on unsaved changes
+  React.useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved legal work. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const loadLastArgumentVersion = async () => {
+    if (!selectedMatter) return;
+
+    setIsLoadingLastVersion(true);
+    try {
+      const arguments = await base44.entities.Argument.filter(
+        { matter_id: selectedMatter },
+        '-version_number',
+        1
+      );
+
+      if (arguments.length > 0) {
+        const lastVersion = arguments[0];
+        setCurrentArgumentVersion(lastVersion);
+        setFactPattern(lastVersion.fact_pattern || '');
+        setPosition(lastVersion.position);
+        
+        if (lastVersion.fact_expansions) {
+          setChronology(lastVersion.fact_expansions.chronology || '');
+          setDisputedFacts(lastVersion.fact_expansions.disputed_facts || '');
+          setUndisputedFacts(lastVersion.fact_expansions.undisputed_facts || '');
+          setLegalIssuesRaised(lastVersion.fact_expansions.legal_issues_raised || '');
+          setProceduralHistory(lastVersion.fact_expansions.procedural_history || '');
+          setLossHarmRisk(lastVersion.fact_expansions.loss_harm_risk || '');
+        }
+
+        if (lastVersion.argument_text) {
+          setGeneratedArgument({ full_argument_markdown: lastVersion.argument_text });
+        }
+
+        setHasUnsavedChanges(false);
+      }
+    } catch (error) {
+      console.error('Failed to load last version:', error);
+    } finally {
+      setIsLoadingLastVersion(false);
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -119,6 +189,11 @@ export default function ArgumentBuilder() {
       return;
     }
 
+    if (!currentMatter?.court) {
+      alert('ERROR: Matter must have a Court specified. Please update Matter details.');
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedArgument(null);
 
@@ -151,10 +226,16 @@ ${lossHarmRisk ? `\n### Loss, Harm, or Risk:\n${lossHarmRisk}` : ''}
       const result = await base44.integrations.Core.InvokeLLM({
         prompt: `You are JurisAI, a UK legal reasoning assistant. Draft a structured court-ready legal argument for ${position}.
 
-## Matter Context
-**Matter:** ${currentMatter?.matter_name || ''}
-**Court:** ${currentMatter?.court || 'N/A'}
+## CRITICAL: COURT & JURISDICTION LOCKED
+**Court:** ${currentMatter.court}
 **Matter Type:** ${currentMatter?.matter_type || 'N/A'}
+**Matter:** ${currentMatter?.matter_name || ''}
+
+YOU MUST:
+- Address ONLY ${currentMatter.court} - DO NOT change court level
+- Apply practice directions for ${currentMatter.court}
+- Use authorities binding on ${currentMatter.court}
+- Use procedural language appropriate to ${currentMatter.court}
 
 ## Core Fact Pattern (Auto-Populated from Matter)
 ${factPattern}
@@ -252,43 +333,79 @@ Return the corrected argument with all factual errors fixed. If no errors, retur
     }
   };
 
-  const handleSave = () => {
-    if (!generatedArgument || !selectedMatter) {
+  const handleSave = async () => {
+    if (!generatedArgument || !selectedMatter || !currentMatter) {
       alert('Please generate an argument first');
       return;
     }
 
     const firstLine = generatedArgument.full_argument_markdown?.split('\n')[0] || 'Legal Argument';
+    const nextVersion = currentArgumentVersion ? currentArgumentVersion.version_number + 1 : 1;
 
-    saveArgumentMutation.mutate({
-      matter_id: selectedMatter,
-      issue_id: selectedIssue || undefined,
-      argument_title: firstLine.replace(/^#+ /, '').substring(0, 100),
-      position: position,
-      proposition: generatedArgument.full_argument_markdown?.substring(0, 500) || '',
-      reasoning: generatedArgument.full_argument_markdown || '',
-      counter_arguments: '',
-      authorities: authorities.map(a => a.id),
-      order_index: 1
-    });
+    try {
+      await base44.entities.Argument.create({
+        matter_id: selectedMatter,
+        version_number: nextVersion,
+        argument_title: firstLine.replace(/^#+ /, '').substring(0, 100),
+        position: position,
+        court: currentMatter.court,
+        jurisdiction: 'UK',
+        fact_pattern: factPattern,
+        fact_expansions: {
+          chronology,
+          disputed_facts: disputedFacts,
+          undisputed_facts: undisputedFacts,
+          legal_issues_raised: legalIssuesRaised,
+          procedural_history: proceduralHistory,
+          loss_harm_risk: lossHarmRisk
+        },
+        argument_text: generatedArgument.full_argument_markdown,
+        authorities: authorities.map(a => a.id),
+        status: 'Draft',
+        parent_version_id: currentArgumentVersion?.id
+      });
+
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries(['arguments']);
+      await loadLastArgumentVersion();
+      alert(`Argument saved as Version ${nextVersion}`);
+    } catch (error) {
+      console.error('Save error:', error);
+      alert('Failed to save argument');
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">AI Argument Builder</h1>
-          <p className="text-slate-600">Generate comprehensive legal arguments with AI analysis</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">⚖️ JurisAI Argument Builder</h1>
+          <p className="text-slate-600">Versioned legal arguments with court-level enforcement</p>
+          {isLoadingLastVersion && (
+            <p className="text-xs text-blue-600 mt-2">Loading last saved version...</p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Input Panel */}
           <Card className="shadow-md border-l-4 border-l-blue-600">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Scale className="h-5 w-5 text-blue-600" />
-                Argument Configuration
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Scale className="h-5 w-5 text-blue-600" />
+                  Argument Configuration
+                  {currentArgumentVersion && (
+                    <Badge variant="outline" className="ml-2">
+                      v{currentArgumentVersion.version_number}
+                    </Badge>
+                  )}
+                </CardTitle>
+                {hasUnsavedChanges && (
+                  <Badge variant="destructive" className="animate-pulse">
+                    Unsaved Changes
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4 max-h-[750px] overflow-y-auto">
               <div>
@@ -331,7 +448,15 @@ Return the corrected argument with all factual errors fixed. If no errors, retur
                   <div className="text-xs text-slate-700 space-y-1">
                     <p><span className="font-medium">Matter:</span> {currentMatter.matter_name}</p>
                     <p><span className="font-medium">Client:</span> {currentMatter.client_name}</p>
-                    {currentMatter.court && <p><span className="font-medium">Court:</span> {currentMatter.court}</p>}
+                    {currentMatter.court ? (
+                      <p className="bg-amber-100 border border-amber-300 rounded px-2 py-1">
+                        <span className="font-bold">🔒 Court (LOCKED):</span> {currentMatter.court}
+                      </p>
+                    ) : (
+                      <p className="bg-red-100 border border-red-300 rounded px-2 py-1 text-red-900">
+                        ⚠️ Court NOT SET - Update Matter first
+                      </p>
+                    )}
                     <p><span className="font-medium">Type:</span> {currentMatter.matter_type}</p>
                     <p><span className="font-medium">Status:</span> {currentMatter.status}</p>
                   </div>
