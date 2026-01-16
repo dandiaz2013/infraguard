@@ -54,64 +54,85 @@ export default function JudgmentAnalyzer() {
 
     try {
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a UK legal expert analyzing a court judgment. Perform comprehensive analysis of the following judgment text:
+        prompt: `You are JurisAI - a UK legal expert performing CRITICAL ANALYSIS of a court judgment. This is NOT a summary - this is STRATEGIC LITIGATION ANALYSIS.
 
+## JUDGMENT TEXT
 ${judgmentText}
 
-Please provide detailed analysis including:
+## YOUR TASK - CRITICAL ANALYSIS FOR LITIGATION
 
-1. CASE INFORMATION
-   - Case name and citation
-   - Court and judges
-   - Date of judgment
-   - Parties involved
+Analyze this judgment for ERRORS, WEAKNESSES, and APPEAL GROUNDS.
 
-2. FACTUAL BACKGROUND
-   - Key facts in chronological order
-   - Procedural history
-   - Previous decisions (if any)
+### 1. CASE INFORMATION
+   - Case name, citation, court, judges, date, parties
 
-3. LEGAL ISSUES
-   - Identify all legal issues/questions before the court
-   - Area of law for each issue
+### 2. ISSUES DECIDED vs ISSUES NOT DECIDED
+   **CRITICAL**: Identify:
+   - What issues the court ACTUALLY decided
+   - What issues the court FAILED to address
+   - What issues were left unresolved
+   - Missing findings of fact
 
-4. CLAIMANT'S ARGUMENTS
-   - Main legal arguments presented by claimant
-   - Authorities cited by claimant
-   - Propositions advanced
+### 3. ERRORS OF LAW (APPEAL GROUNDS)
+   For EACH error, specify:
+   - The specific legal error made
+   - What the correct legal position should be
+   - Supporting authority showing the error
+   - Impact on outcome
+   - Strength of appeal point (Strong/Moderate/Weak)
 
-5. DEFENDANT'S ARGUMENTS
-   - Main legal arguments presented by defendant
-   - Authorities cited by defendant
-   - Counter-arguments and defenses
+### 4. ERRORS OF FACT (APPEAL GROUNDS)
+   - Factual findings NOT supported by evidence
+   - Material facts ignored or overlooked
+   - Mischaracterization of evidence
+   - Impact on reasoning
 
-6. COURT'S REASONING
-   - How the court analyzed each issue
-   - Legal principles applied
-   - Interpretation of authorities
-   - Key quotes from the judgment
+### 5. PROCEDURAL IRREGULARITIES
+   - Breaches of natural justice
+   - Failure to follow correct procedure
+   - CPR/Practice Direction violations
+   - Denial of fair hearing
 
-7. HOLDING AND OUTCOME
-   - Court's decision on each issue
-   - Final judgment/order
-   - Remedies granted
+### 6. MISAPPLICATION OF AUTHORITIES
+   For each cited case, analyze:
+   - Was it correctly cited?
+   - Was it properly applied?
+   - Is it still good law?
+   - Was it distinguished when it shouldn't be?
+   - Were binding authorities ignored?
 
-8. CITED AUTHORITIES
-   - List all case law cited
-   - For each: case name, citation, how it was applied
-   - Identify if properly applied or misapplied
+### 7. COUNTER-AUTHORITIES THE COURT IGNORED
+   - Identify binding or persuasive authorities NOT cited
+   - Explain why they should have been considered
+   - How they would change the outcome
 
-9. LEGAL PRINCIPLES ESTABLISHED
-   - Key legal principles from this case
-   - Tests or standards articulated
-   - Precedential value
+### 8. REASONING WEAKNESSES
+   - Logical fallacies
+   - Gaps in reasoning
+   - Contradictions in judgment
+   - Failure to address key arguments
 
-10. EXECUTIVE SUMMARY
-    - 3-4 paragraph summary of the entire judgment
-    - Key takeaways
-    - Significance
+### 9. CLEAR POINTS TO RAISE (ACTIONABLE)
+   Create numbered list of SPECIFIC POINTS that should be raised:
+   - In appeal grounds
+   - In further arguments
+   - In response submissions
+   Format: "Point 1: [Specific error] - [Why it matters] - [Remedy sought]"
 
-Verify all cited authorities for accuracy and proper application. Flag any concerning citations.`,
+### 10. STRATEGIC RECOMMENDATIONS
+   - Should this be appealed? (YES/NO with reasoning)
+   - Best appeal grounds (ranked by strength)
+   - Alternative remedies
+   - Risk assessment
+
+### 11. EXECUTIVE SUMMARY
+   Write 4-5 paragraphs:
+   - What went wrong in this judgment
+   - Key vulnerabilities
+   - Recommended action
+   - Litigation strategy
+
+CRITICAL: Be direct, specific, and litigation-focused. This analysis is for a lawyer preparing next steps.`,
         add_context_from_internet: true,
         response_json_schema: {
           type: "object",
@@ -123,88 +144,99 @@ Verify all cited authorities for accuracy and proper application. Flag any conce
                 citation: { type: "string" },
                 court: { type: "string" },
                 judges: { type: "array", items: { type: "string" } },
-                date: { type: "string" },
-                parties: { type: "object" }
+                date: { type: "string" }
               }
             },
-            factual_background: {
-              type: "object",
-              properties: {
-                key_facts: { type: "array", items: { type: "string" } },
-                procedural_history: { type: "string" },
-                previous_decisions: { type: "string" }
-              }
+            issues_decided: {
+              type: "array",
+              items: { type: "string" }
             },
-            legal_issues: {
+            issues_not_decided: {
+              type: "array",
+              items: { type: "string" }
+            },
+            errors_of_law: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  issue: { type: "string" },
-                  area_of_law: { type: "string" }
+                  error: { type: "string" },
+                  correct_position: { type: "string" },
+                  supporting_authority: { type: "string" },
+                  impact: { type: "string" },
+                  strength: { type: "string", enum: ["Strong", "Moderate", "Weak"] }
                 }
               }
             },
-            claimant_arguments: {
+            errors_of_fact: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  argument: { type: "string" },
-                  authorities_cited: { type: "array", items: { type: "string" } },
-                  propositions: { type: "array", items: { type: "string" } }
+                  finding: { type: "string" },
+                  problem: { type: "string" },
+                  evidence_issue: { type: "string" }
                 }
               }
             },
-            defendant_arguments: {
+            procedural_irregularities: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  argument: { type: "string" },
-                  authorities_cited: { type: "array", items: { type: "string" } },
-                  defenses: { type: "array", items: { type: "string" } }
+                  irregularity: { type: "string" },
+                  rule_breached: { type: "string" },
+                  impact: { type: "string" }
                 }
               }
             },
-            court_reasoning: {
-              type: "object",
-              properties: {
-                analysis: { type: "string" },
-                principles_applied: { type: "array", items: { type: "string" } },
-                key_quotes: { type: "array", items: { type: "string" } }
-              }
-            },
-            holding: {
-              type: "object",
-              properties: {
-                decision: { type: "string" },
-                final_order: { type: "string" },
-                remedies: { type: "array", items: { type: "string" } }
-              }
-            },
-            cited_authorities: {
+            misapplied_authorities: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
                   case_name: { type: "string" },
                   citation: { type: "string" },
-                  how_applied: { type: "string" },
-                  properly_applied: { type: "boolean" },
-                  concerns: { type: "string" }
+                  how_misapplied: { type: "string" },
+                  correct_application: { type: "string" }
                 }
               }
             },
-            legal_principles: {
+            counter_authorities_ignored: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  principle: { type: "string" },
-                  explanation: { type: "string" },
-                  precedential_value: { type: "string" }
+                  case_name: { type: "string" },
+                  citation: { type: "string" },
+                  why_relevant: { type: "string" },
+                  impact_if_considered: { type: "string" }
                 }
+              }
+            },
+            reasoning_weaknesses: {
+              type: "array",
+              items: { type: "string" }
+            },
+            clear_points_to_raise: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  point_number: { type: "number" },
+                  specific_error: { type: "string" },
+                  why_it_matters: { type: "string" },
+                  remedy_sought: { type: "string" }
+                }
+              }
+            },
+            strategic_recommendations: {
+              type: "object",
+              properties: {
+                should_appeal: { type: "string" },
+                best_grounds: { type: "array", items: { type: "string" } },
+                alternative_remedies: { type: "array", items: { type: "string" } },
+                risk_assessment: { type: "string" }
               }
             },
             executive_summary: { type: "string" }
@@ -225,8 +257,8 @@ Verify all cited authorities for accuracy and proper application. Flag any conce
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Judgment Analyzer</h1>
-          <p className="text-slate-600">AI-powered analysis of court judgments with citation verification</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">⚖️ JurisAI Judgment Analyzer</h1>
+          <p className="text-slate-600">Critical analysis for errors, appeal grounds, and litigation strategy</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -304,128 +336,213 @@ Verify all cited authorities for accuracy and proper application. Flag any conce
                 <div className="space-y-6">
                   {/* Executive Summary */}
                   {analysis.executive_summary && (
-                    <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                      <h3 className="font-semibold text-blue-900 mb-2">Executive Summary</h3>
-                      <p className="text-sm text-slate-700 leading-relaxed">{analysis.executive_summary}</p>
+                    <div className="bg-red-50 border-l-4 border-red-600 p-4 rounded">
+                      <h3 className="font-bold text-red-900 mb-2">⚠️ CRITICAL ANALYSIS SUMMARY</h3>
+                      <div className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">{analysis.executive_summary}</div>
                     </div>
                   )}
 
                   {/* Case Information */}
                   {analysis.case_information && (
-                    <div>
+                    <div className="bg-slate-100 p-4 rounded">
                       <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                         <FileText className="h-4 w-4" />
                         Case Information
                       </h3>
-                      <div className="space-y-2 text-sm">
+                      <div className="space-y-1 text-sm">
                         <p><span className="font-medium">Case:</span> {analysis.case_information.case_name}</p>
                         <p><span className="font-medium">Citation:</span> {analysis.case_information.citation}</p>
                         <p><span className="font-medium">Court:</span> {analysis.case_information.court}</p>
-                        {analysis.case_information.date && (
-                          <p><span className="font-medium">Date:</span> {analysis.case_information.date}</p>
-                        )}
+                        <p><span className="font-medium">Date:</span> {analysis.case_information.date}</p>
                       </div>
                     </div>
                   )}
 
-                  {/* Legal Issues */}
-                  {analysis.legal_issues?.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">Legal Issues</h3>
-                      <div className="space-y-3">
-                        {analysis.legal_issues.map((issue, idx) => (
-                          <div key={idx} className="bg-slate-50 p-3 rounded">
-                            <p className="text-sm font-medium text-slate-900">{issue.issue}</p>
-                            <Badge variant="outline" className="mt-2">{issue.area_of_law}</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Arguments */}
+                  {/* Issues Decided vs Not Decided */}
                   <div className="grid grid-cols-2 gap-4">
-                    {analysis.claimant_arguments?.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-slate-900 mb-3 text-sm">Claimant Arguments</h3>
-                        <div className="space-y-2">
-                          {analysis.claimant_arguments.slice(0, 3).map((arg, idx) => (
-                            <div key={idx} className="text-xs bg-green-50 p-2 rounded">
-                              {arg.argument}
-                            </div>
+                    {analysis.issues_decided?.length > 0 && (
+                      <div className="bg-green-50 border border-green-200 p-4 rounded">
+                        <h3 className="font-semibold text-green-900 mb-3 text-sm">✓ Issues Decided</h3>
+                        <ul className="space-y-2 text-xs">
+                          {analysis.issues_decided.map((issue, idx) => (
+                            <li key={idx} className="text-green-800">• {issue}</li>
                           ))}
-                        </div>
+                        </ul>
                       </div>
                     )}
-                    {analysis.defendant_arguments?.length > 0 && (
-                      <div>
-                        <h3 className="font-semibold text-slate-900 mb-3 text-sm">Defendant Arguments</h3>
-                        <div className="space-y-2">
-                          {analysis.defendant_arguments.slice(0, 3).map((arg, idx) => (
-                            <div key={idx} className="text-xs bg-red-50 p-2 rounded">
-                              {arg.argument}
-                            </div>
+                    {analysis.issues_not_decided?.length > 0 && (
+                      <div className="bg-red-50 border border-red-200 p-4 rounded">
+                        <h3 className="font-semibold text-red-900 mb-3 text-sm">✗ Issues NOT Decided</h3>
+                        <ul className="space-y-2 text-xs">
+                          {analysis.issues_not_decided.map((issue, idx) => (
+                            <li key={idx} className="text-red-800 font-medium">• {issue}</li>
                           ))}
-                        </div>
+                        </ul>
                       </div>
                     )}
                   </div>
 
-                  {/* Cited Authorities with Verification */}
-                  {analysis.cited_authorities?.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">Cited Authorities (Verified)</h3>
-                      <div className="space-y-3">
-                        {analysis.cited_authorities.map((auth, idx) => (
-                          <div key={idx} className={`p-3 rounded border-l-4 ${
-                            auth.properly_applied 
-                              ? 'bg-green-50 border-green-500' 
-                              : 'bg-red-50 border-red-500'
-                          }`}>
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-slate-900">{auth.case_name}</p>
-                                <p className="text-xs text-slate-600 font-mono mt-1">{auth.citation}</p>
+                  {/* Clear Points to Raise - MOST IMPORTANT */}
+                  {analysis.clear_points_to_raise?.length > 0 && (
+                    <div className="bg-amber-50 border-2 border-amber-500 p-5 rounded">
+                      <h3 className="font-bold text-amber-900 mb-4 text-lg">📋 CLEAR POINTS TO RAISE</h3>
+                      <div className="space-y-4">
+                        {analysis.clear_points_to_raise.map((point, idx) => (
+                          <div key={idx} className="bg-white p-4 rounded border-l-4 border-amber-600">
+                            <div className="flex items-start gap-3">
+                              <Badge className="bg-amber-600 text-white flex-shrink-0">Point {point.point_number}</Badge>
+                              <div className="flex-1 space-y-2">
+                                <p className="font-semibold text-slate-900">{point.specific_error}</p>
+                                <p className="text-sm text-slate-700"><span className="font-medium">Why it matters:</span> {point.why_it_matters}</p>
+                                <p className="text-sm text-blue-700"><span className="font-medium">Remedy:</span> {point.remedy_sought}</p>
                               </div>
-                              {auth.properly_applied ? (
-                                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
-                              ) : (
-                                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-                              )}
                             </div>
-                            <p className="text-xs text-slate-600 mt-2">{auth.how_applied}</p>
-                            {auth.concerns && (
-                              <p className="text-xs text-red-700 mt-2 font-medium">⚠️ {auth.concerns}</p>
-                            )}
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Legal Principles */}
-                  {analysis.legal_principles?.length > 0 && (
+                  {/* Errors of Law */}
+                  {analysis.errors_of_law?.length > 0 && (
                     <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">Legal Principles Established</h3>
+                      <h3 className="font-semibold text-red-900 mb-3">🚨 ERRORS OF LAW (Appeal Grounds)</h3>
                       <div className="space-y-3">
-                        {analysis.legal_principles.map((principle, idx) => (
-                          <div key={idx} className="bg-purple-50 p-3 rounded">
-                            <p className="text-sm font-medium text-slate-900">{principle.principle}</p>
-                            <p className="text-xs text-slate-600 mt-2">{principle.explanation}</p>
+                        {analysis.errors_of_law.map((error, idx) => (
+                          <div key={idx} className="bg-red-50 border-l-4 border-red-600 p-4 rounded">
+                            <div className="flex items-start justify-between mb-2">
+                              <p className="text-sm font-bold text-red-900">ERROR: {error.error}</p>
+                              <Badge className={
+                                error.strength === 'Strong' ? 'bg-red-600' :
+                                error.strength === 'Moderate' ? 'bg-orange-500' : 'bg-yellow-500'
+                              }>{error.strength}</Badge>
+                            </div>
+                            <p className="text-sm text-slate-700 mt-2"><span className="font-medium">Correct position:</span> {error.correct_position}</p>
+                            <p className="text-sm text-slate-700 mt-2"><span className="font-medium">Authority:</span> {error.supporting_authority}</p>
+                            <p className="text-sm text-red-800 mt-2"><span className="font-medium">Impact:</span> {error.impact}</p>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Court's Holding */}
-                  {analysis.holding && (
-                    <div className="bg-slate-900 text-white p-4 rounded">
-                      <h3 className="font-semibold mb-2">Court's Decision</h3>
-                      <p className="text-sm">{analysis.holding.decision}</p>
-                      {analysis.holding.final_order && (
-                        <p className="text-sm mt-2 opacity-90">{analysis.holding.final_order}</p>
-                      )}
+                  {/* Errors of Fact */}
+                  {analysis.errors_of_fact?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-orange-900 mb-3">⚠️ ERRORS OF FACT</h3>
+                      <div className="space-y-2">
+                        {analysis.errors_of_fact.map((error, idx) => (
+                          <div key={idx} className="bg-orange-50 border-l-4 border-orange-500 p-3 rounded">
+                            <p className="text-sm font-medium text-orange-900">{error.finding}</p>
+                            <p className="text-xs text-slate-700 mt-1"><span className="font-medium">Problem:</span> {error.problem}</p>
+                            <p className="text-xs text-slate-700 mt-1"><span className="font-medium">Evidence:</span> {error.evidence_issue}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Procedural Irregularities */}
+                  {analysis.procedural_irregularities?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-purple-900 mb-3">⚖️ PROCEDURAL IRREGULARITIES</h3>
+                      <div className="space-y-2">
+                        {analysis.procedural_irregularities.map((irreg, idx) => (
+                          <div key={idx} className="bg-purple-50 border-l-4 border-purple-500 p-3 rounded">
+                            <p className="text-sm font-medium text-purple-900">{irreg.irregularity}</p>
+                            <p className="text-xs text-slate-700 mt-1"><span className="font-medium">Rule breached:</span> {irreg.rule_breached}</p>
+                            <p className="text-xs text-slate-700 mt-1"><span className="font-medium">Impact:</span> {irreg.impact}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Misapplied Authorities */}
+                  {analysis.misapplied_authorities?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-red-900 mb-3">❌ AUTHORITIES MISAPPLIED</h3>
+                      <div className="space-y-3">
+                        {analysis.misapplied_authorities.map((auth, idx) => (
+                          <div key={idx} className="bg-red-50 border border-red-200 p-3 rounded">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-1" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-red-900">{auth.case_name}</p>
+                                <p className="text-xs text-slate-600 font-mono mt-1">{auth.citation}</p>
+                                <p className="text-xs text-slate-700 mt-2"><span className="font-medium">Misapplication:</span> {auth.how_misapplied}</p>
+                                <p className="text-xs text-green-700 mt-1"><span className="font-medium">Correct application:</span> {auth.correct_application}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Counter Authorities Ignored */}
+                  {analysis.counter_authorities_ignored?.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-blue-900 mb-3">📚 AUTHORITIES THE COURT IGNORED</h3>
+                      <div className="space-y-3">
+                        {analysis.counter_authorities_ignored.map((auth, idx) => (
+                          <div key={idx} className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
+                            <p className="text-sm font-medium text-blue-900">{auth.case_name}</p>
+                            <p className="text-xs text-slate-600 font-mono mt-1">{auth.citation}</p>
+                            <p className="text-xs text-slate-700 mt-2"><span className="font-medium">Why relevant:</span> {auth.why_relevant}</p>
+                            <p className="text-xs text-blue-800 mt-1"><span className="font-medium">Impact:</span> {auth.impact_if_considered}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reasoning Weaknesses */}
+                  {analysis.reasoning_weaknesses?.length > 0 && (
+                    <div className="bg-yellow-50 border border-yellow-300 p-4 rounded">
+                      <h3 className="font-semibold text-yellow-900 mb-3">💭 REASONING WEAKNESSES</h3>
+                      <ul className="space-y-2 text-sm">
+                        {analysis.reasoning_weaknesses.map((weakness, idx) => (
+                          <li key={idx} className="text-slate-800">• {weakness}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Strategic Recommendations */}
+                  {analysis.strategic_recommendations && (
+                    <div className="bg-slate-900 text-white p-5 rounded">
+                      <h3 className="font-bold mb-4 text-lg">🎯 STRATEGIC RECOMMENDATIONS</h3>
+                      <div className="space-y-3 text-sm">
+                        <div>
+                          <p className="font-semibold text-amber-400">Should Appeal?</p>
+                          <p className="mt-1">{analysis.strategic_recommendations.should_appeal}</p>
+                        </div>
+                        {analysis.strategic_recommendations.best_grounds?.length > 0 && (
+                          <div>
+                            <p className="font-semibold text-amber-400">Best Appeal Grounds (Ranked):</p>
+                            <ol className="mt-1 space-y-1 list-decimal list-inside">
+                              {analysis.strategic_recommendations.best_grounds.map((ground, idx) => (
+                                <li key={idx}>{ground}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+                        {analysis.strategic_recommendations.alternative_remedies?.length > 0 && (
+                          <div>
+                            <p className="font-semibold text-amber-400">Alternative Remedies:</p>
+                            <ul className="mt-1 space-y-1">
+                              {analysis.strategic_recommendations.alternative_remedies.map((remedy, idx) => (
+                                <li key={idx}>• {remedy}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-semibold text-amber-400">Risk Assessment:</p>
+                          <p className="mt-1">{analysis.strategic_recommendations.risk_assessment}</p>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
