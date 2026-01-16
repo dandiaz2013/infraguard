@@ -18,6 +18,7 @@ export default function DocumentGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [loadedArgument, setLoadedArgument] = useState(null);
 
   const queryClient = useQueryClient();
 
@@ -30,6 +31,24 @@ export default function DocumentGenerator() {
     queryKey: ['authorities', selectedMatter],
     queryFn: () => base44.entities.LegalAuthority.filter({ matter_id: selectedMatter }),
     enabled: !!selectedMatter
+  });
+
+  const { data: latestArgument } = useQuery({
+    queryKey: ['latest-argument', selectedMatter],
+    queryFn: async () => {
+      const args = await base44.entities.Argument.filter(
+        { matter_id: selectedMatter },
+        '-version_number',
+        1
+      );
+      return args[0];
+    },
+    enabled: !!selectedMatter,
+    onSuccess: (data) => {
+      if (data) {
+        setLoadedArgument(data);
+      }
+    }
   });
 
   const saveMutation = useMutation({
@@ -51,6 +70,10 @@ export default function DocumentGenerator() {
     setShowPreview(false);
 
     try {
+      const argumentContext = loadedArgument 
+        ? `\n\n## SAVED ARGUMENT (Version ${loadedArgument.version_number})\n**Title:** ${loadedArgument.argument_title}\n**Position:** ${loadedArgument.position}\n**Court:** ${loadedArgument.court}\n\n### Fact Pattern:\n${loadedArgument.fact_pattern}\n\n### Generated Argument:\n${loadedArgument.argument_text || ''}`
+        : '';
+
       const authoritiesContext = authorities.length > 0 
         ? `\n\nRelevant Legal Authorities:\n${authorities.map(a => 
             `- ${a.title} (${a.citation})\n  Legal Principle: ${a.legal_principle}\n  Relevance: ${a.relevance}`
@@ -71,6 +94,7 @@ export default function DocumentGenerator() {
 
 Briefing Notes:
 ${briefingNotes}
+${argumentContext}
 ${authoritiesContext}
 
 Requirements:
@@ -175,11 +199,22 @@ Generate the complete ${documentType}:`;
                 />
               </div>
 
+              {loadedArgument && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-900 font-medium mb-2">
+                    ✓ Loaded Argument v{loadedArgument.version_number}: {loadedArgument.argument_title}
+                  </p>
+                  <p className="text-xs text-green-800">
+                    Position: {loadedArgument.position} | Court: {loadedArgument.court}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="briefing">Briefing Notes *</Label>
                 <Textarea
                   id="briefing"
-                  placeholder="Provide detailed instructions, facts, and specific points to include in the document. The more detail you provide, the better the generated document will be."
+                  placeholder="Provide detailed instructions, facts, and specific points to include in the document. The saved argument will be automatically incorporated."
                   value={briefingNotes}
                   onChange={(e) => setBriefingNotes(e.target.value)}
                   rows={12}

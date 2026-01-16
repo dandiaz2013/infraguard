@@ -7,8 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle } from 'lucide-react';
+import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle, Link as LinkIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import AICoach from '../components/AICoach';
 
 export default function ArgumentBuilder() {
   const [selectedMatter, setSelectedMatter] = useState('');
@@ -29,6 +30,7 @@ export default function ArgumentBuilder() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [currentArgumentVersion, setCurrentArgumentVersion] = useState(null);
   const [isLoadingLastVersion, setIsLoadingLastVersion] = useState(false);
+  const [linkedDocuments, setLinkedDocuments] = useState({});
 
   const queryClient = useQueryClient();
 
@@ -172,7 +174,21 @@ export default function ArgumentBuilder() {
   };
 
   const removeDocument = (index) => {
-    setUploadedDocuments(uploadedDocuments.filter((_, i) => i !== index));
+    const newDocs = uploadedDocuments.filter((_, i) => i !== index);
+    setUploadedDocuments(newDocs);
+    // Remove any links to this document
+    const newLinked = { ...linkedDocuments };
+    Object.keys(newLinked).forEach(key => {
+      newLinked[key] = newLinked[key].filter((_, i) => i !== index);
+    });
+    setLinkedDocuments(newLinked);
+  };
+
+  const linkDocumentToPoint = (docIndex, pointType) => {
+    setLinkedDocuments(prev => ({
+      ...prev,
+      [pointType]: [...(prev[pointType] || []), docIndex]
+    }));
   };
 
   const saveArgumentMutation = useMutation({
@@ -218,9 +234,12 @@ ${lossHarmRisk ? `\n### Loss, Harm, or Risk:\n${lossHarmRisk}` : ''}
       `.trim();
 
       const documentsContext = uploadedDocuments.length > 0
-        ? `\n\n## Uploaded Documents\n${uploadedDocuments.map((doc, idx) => 
-            `### Document ${idx + 1}: ${doc.name}\n${doc.content.substring(0, 3000)}`
-          ).join('\n\n')}`
+        ? `\n\n## Uploaded Documents\n${uploadedDocuments.map((doc, idx) => {
+            const linkedTo = Object.entries(linkedDocuments)
+              .filter(([_, docs]) => docs.includes(idx))
+              .map(([point]) => point);
+            return `### Document ${idx + 1}: ${doc.name}${linkedTo.length > 0 ? ` (Linked to: ${linkedTo.join(', ')})` : ''}\n${doc.content.substring(0, 3000)}`;
+          }).join('\n\n')}`
         : '';
 
       const result = await base44.integrations.Core.InvokeLLM({
@@ -250,6 +269,8 @@ When generating arguments:
 - Treat auto-populated Matter facts as accurate unless contradicted
 - Prioritise user-added expansions
 - Identify legally material facts
+- Reference uploaded documents as evidence where relevant
+- Cross-reference document evidence with legal points
 - Ignore emotional language unless legally relevant
 - Structure arguments clearly with headings and sub-points
 - Where appropriate, flag factual gaps or evidential weaknesses
@@ -386,7 +407,7 @@ Return the corrected argument with all factual errors fixed. If no errors, retur
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Input Panel */}
           <Card className="shadow-md border-l-4 border-l-blue-600">
             <CardHeader>
@@ -493,14 +514,39 @@ Return the corrected argument with all factual errors fixed. If no errors, retur
                   {uploadedDocuments.length > 0 && (
                     <div className="space-y-2">
                       {uploadedDocuments.map((doc, idx) => (
-                        <div key={idx} className="flex items-center justify-between bg-green-50 border border-green-200 rounded p-2">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-green-700" />
-                            <span className="text-xs text-green-900">{doc.name}</span>
+                        <div key={idx} className="bg-green-50 border border-green-200 rounded p-2">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-green-700" />
+                              <span className="text-xs text-green-900">{doc.name}</span>
+                            </div>
+                            <button onClick={() => removeDocument(idx)} className="text-green-700 hover:text-green-900">
+                              <X className="h-4 w-4" />
+                            </button>
                           </div>
-                          <button onClick={() => removeDocument(idx)} className="text-green-700 hover:text-green-900">
-                            <X className="h-4 w-4" />
-                          </button>
+                          <div className="flex flex-wrap gap-1">
+                            <button 
+                              onClick={() => linkDocumentToPoint(idx, 'chronology')}
+                              className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                            >
+                              <LinkIcon className="h-2 w-2 inline mr-1" />
+                              Chronology
+                            </button>
+                            <button 
+                              onClick={() => linkDocumentToPoint(idx, 'disputed_facts')}
+                              className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                            >
+                              <LinkIcon className="h-2 w-2 inline mr-1" />
+                              Disputed
+                            </button>
+                            <button 
+                              onClick={() => linkDocumentToPoint(idx, 'evidence')}
+                              className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                            >
+                              <LinkIcon className="h-2 w-2 inline mr-1" />
+                              Evidence
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -612,6 +658,15 @@ Return the corrected argument with all factual errors fixed. If no errors, retur
               </Button>
             </CardContent>
           </Card>
+
+          {/* AI Coach Panel */}
+          <AICoach
+            factPattern={factPattern}
+            generatedArgument={generatedArgument}
+            currentMatter={currentMatter}
+            authorities={authorities}
+            position={position}
+          />
 
           {/* Results Panel */}
           <Card className="shadow-md">
