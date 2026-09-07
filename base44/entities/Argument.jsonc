@@ -1,0 +1,109 @@
+{
+  "name": "Argument",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Related matter ID"
+    },
+    "version_number": {
+      "type": "number",
+      "description": "Version number for this argument",
+      "default": 1
+    },
+    "argument_title": {
+      "type": "string",
+      "description": "Title of the argument"
+    },
+    "position": {
+      "type": "string",
+      "enum": [
+        "Claimant",
+        "Defendant",
+        "Appellant",
+        "Respondent"
+      ],
+      "description": "Which side this argument supports"
+    },
+    "court": {
+      "type": "string",
+      "description": "Court locked from Matter"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "description": "Jurisdiction locked from Matter"
+    },
+    "fact_pattern": {
+      "type": "string",
+      "description": "Saved fact pattern for this version"
+    },
+    "fact_expansions": {
+      "type": "object",
+      "properties": {
+        "chronology": {
+          "type": "string"
+        },
+        "disputed_facts": {
+          "type": "string"
+        },
+        "undisputed_facts": {
+          "type": "string"
+        },
+        "legal_issues_raised": {
+          "type": "string"
+        },
+        "procedural_history": {
+          "type": "string"
+        },
+        "loss_harm_risk": {
+          "type": "string"
+        }
+      },
+      "description": "Fact pattern expansions"
+    },
+    "argument_text": {
+      "type": "string",
+      "description": "Full argument markdown text"
+    },
+    "legal_issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Identified legal issues"
+    },
+    "authorities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Authority IDs supporting this argument"
+    },
+    "practice_directions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Applied Practice Directions"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Final"
+      ],
+      "default": "Draft",
+      "description": "Argument status"
+    },
+    "parent_version_id": {
+      "type": "string",
+      "description": "ID of previous version if this is a revision"
+    }
+  },
+  "required": [
+    "matter_id",
+    "argument_title",
+    "position",
+    "court"
+  ]
+}
