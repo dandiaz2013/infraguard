@@ -1,0 +1,70 @@
+{
+  "name": "Matter",
+  "type": "object",
+  "properties": {
+    "matter_reference": {
+      "type": "string",
+      "description": "Unique matter reference number"
+    },
+    "matter_name": {
+      "type": "string",
+      "description": "Name/title of the matter"
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Client name"
+    },
+    "matter_type": {
+      "type": "string",
+      "enum": [
+        "Civil Litigation",
+        "Criminal Defence",
+        "Family Law",
+        "Employment",
+        "Contract Dispute",
+        "Judicial Review",
+        "Appeal",
+        "Other"
+      ],
+      "description": "Type of legal matter"
+    },
+    "court": {
+      "type": "string",
+      "description": "Court or tribunal"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Active",
+        "On Hold",
+        "Closed",
+        "Appeal Pending"
+      ],
+      "default": "Active"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of the matter"
+    },
+    "key_dates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "matter_name",
+    "client_name",
+    "matter_type"
+  ]
+}
