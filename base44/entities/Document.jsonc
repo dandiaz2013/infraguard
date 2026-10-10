@@ -1,0 +1,56 @@
+{
+  "name": "Document",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Related matter ID"
+    },
+    "document_type": {
+      "type": "string",
+      "enum": [
+        "Particulars of Claim",
+        "Defence",
+        "Witness Statement",
+        "Skeleton Argument",
+        "Appeal Grounds",
+        "Case Summary",
+        "Legal Opinion",
+        "Other"
+      ],
+      "description": "Type of legal document"
+    },
+    "title": {
+      "type": "string",
+      "description": "Document title"
+    },
+    "content": {
+      "type": "string",
+      "description": "Document content in markdown or HTML"
+    },
+    "version": {
+      "type": "number",
+      "default": 1,
+      "description": "Version number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Draft",
+        "Review",
+        "Final",
+        "Filed"
+      ],
+      "default": "Draft"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Internal notes about the document"
+    }
+  },
+  "required": [
+    "matter_id",
+    "document_type",
+    "title"
+  ]
+}

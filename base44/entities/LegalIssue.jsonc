@@ -1,0 +1,46 @@
+{
+  "name": "LegalIssue",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Related matter ID"
+    },
+    "issue_title": {
+      "type": "string",
+      "description": "Concise statement of the legal issue"
+    },
+    "issue_description": {
+      "type": "string",
+      "description": "Detailed description of the issue"
+    },
+    "area_of_law": {
+      "type": "string",
+      "description": "Area of law (e.g., Contract, Tort, Constitutional)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Identified",
+        "Researching",
+        "Authorities Found",
+        "Argument Drafted",
+        "Resolved"
+      ],
+      "default": "Identified"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "High",
+        "Medium",
+        "Low"
+      ],
+      "default": "Medium"
+    }
+  },
+  "required": [
+    "matter_id",
+    "issue_title"
+  ]
+}
