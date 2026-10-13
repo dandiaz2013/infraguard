@@ -1,0 +1,68 @@
+{
+  "name": "LegalAuthority",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Related matter ID"
+    },
+    "authority_type": {
+      "type": "string",
+      "enum": [
+        "Case Law",
+        "Statute",
+        "Statutory Instrument",
+        "European Law",
+        "Practice Direction",
+        "Other"
+      ],
+      "description": "Type of legal authority"
+    },
+    "citation": {
+      "type": "string",
+      "description": "Proper legal citation"
+    },
+    "title": {
+      "type": "string",
+      "description": "Case name or statute title"
+    },
+    "court": {
+      "type": "string",
+      "description": "Court that decided the case"
+    },
+    "year": {
+      "type": "string",
+      "description": "Year of decision/enactment"
+    },
+    "legal_principle": {
+      "type": "string",
+      "description": "Key legal principle or holding"
+    },
+    "relevance": {
+      "type": "string",
+      "description": "Why this authority is relevant to the matter"
+    },
+    "key_quotes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Important quotes from the authority"
+    },
+    "url": {
+      "type": "string",
+      "description": "Link to full text"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "title",
+    "authority_type",
+    "citation"
+  ]
+}
