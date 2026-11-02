@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Upload, Loader2, AlertCircle, CheckCircle2, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import fileToBase64 from '@/lib/fileToBase64';
 
 export default function JudgmentAnalyzer() {
   const [judgmentText, setJudgmentText] = useState('');
@@ -22,10 +23,11 @@ export default function JudgmentAnalyzer() {
     setJudgmentFile(file);
     
     try {
-      const uploadResult = await base44.integrations.Core.UploadPrivateFile({ file });
+      const fileBase64 = await fileToBase64(file);
 
       const extractResponse = await base44.functions.invoke('documentTextExtract', {
-        fileUri: uploadResult.file_uri
+        fileName: file.name,
+        fileBase64
       });
 
       if (extractResponse.data?.text) {

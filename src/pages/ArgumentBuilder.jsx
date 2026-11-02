@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle, Link as LinkIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import AICoach from '../components/AICoach';
+import fileToBase64 from '@/lib/fileToBase64';
 
 export default function ArgumentBuilder() {
   const [selectedMatter, setSelectedMatter] = useState('');
@@ -143,16 +144,17 @@ export default function ArgumentBuilder() {
       const uploadedDocs = [];
       
       for (const file of files) {
-        const uploadResult = await base44.integrations.Core.UploadPrivateFile({ file });
+        const fileBase64 = await fileToBase64(file);
 
         const extractResponse = await base44.functions.invoke('documentTextExtract', {
-          fileUri: uploadResult.file_uri
+          fileName: file.name,
+          fileBase64
         });
 
         if (extractResponse.data?.text) {
           uploadedDocs.push({
             name: file.name,
-            url: uploadResult.file_uri,
+            url: extractResponse.data.file_uri,
             content: extractResponse.data.text
           });
         }
