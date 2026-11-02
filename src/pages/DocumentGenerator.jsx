@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { FileText, Loader2, Download, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import ExtractCheckPanel from '@/components/authorities/ExtractCheckPanel';
 
 export default function DocumentGenerator() {
   const [selectedMatter, setSelectedMatter] = useState('');
@@ -32,6 +33,18 @@ export default function DocumentGenerator() {
     queryFn: () => base44.entities.LegalAuthority.filter({ matter_id: selectedMatter }),
     enabled: !!selectedMatter
   });
+
+  const { data: mainAuthorities = [] } = useQuery({
+    queryKey: ['caseLaw'],
+    queryFn: () => base44.entities.CaseLaw.list('-created_date'),
+  });
+
+  const { data: authorityExtracts = [] } = useQuery({
+    queryKey: ['authorityExtracts'],
+    queryFn: () => base44.entities.AuthorityExtract.list('-added_date'),
+  });
+
+  const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
 
   const { data: latestArgument } = useQuery({
     queryKey: ['latest-argument', selectedMatter],
@@ -86,6 +99,21 @@ export default function DocumentGenerator() {
           citation: a.citation,
           legal_principle: a.legal_principle,
           relevance: a.relevance
+        })),
+        main_authorities: mainAuthorityPool.map((record) => ({
+          name: record.name,
+          citation: record.neutral_citation || '',
+          court: record.court || '',
+          year: record.year || null,
+          official_url: record.official_url || record.url || '',
+          checked: record.check_status === 'Extract checked against official text',
+          extracts: authorityExtracts
+            .filter((extract) => extract.case_law_id === record.id)
+            .map((extract) => ({
+              paragraph_ref: extract.paragraph_ref,
+              extract_text: extract.extract_text,
+              proposition: extract.proposition || '',
+            })),
         }))
       });
 
@@ -260,6 +288,18 @@ export default function DocumentGenerator() {
             </CardContent>
           </Card>
         </div>
+
+        {generatedContent && (
+          <div className="mt-6">
+            <ExtractCheckPanel
+              text={generatedContent}
+              extracts={authorityExtracts.filter((extract) =>
+                mainAuthorityPool.some((record) => record.id === extract.case_law_id)
+              )}
+              mainAuthorities={mainAuthorityPool}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

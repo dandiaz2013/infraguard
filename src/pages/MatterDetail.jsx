@@ -14,6 +14,7 @@ import {
 import { format } from 'date-fns';
 import TriageTab from '@/components/matters/TriageTab';
 import CaseLawTab from '@/components/matters/CaseLawTab';
+import MainAuthorityPanel from '@/components/caselaw/MainAuthorityPanel';
 
 export default function MatterDetail() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -151,6 +152,8 @@ export default function MatterDetail() {
             </CardContent>
           </Card>
         )}
+
+        <MainAuthorityPanel matterId={matterId} />
 
         {/* Tabs */}
         <Tabs defaultValue="authorities" className="space-y-6">

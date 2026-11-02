@@ -6,9 +6,14 @@ import { createPageUrl } from '../utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, ExternalLink, ShieldCheck, BookOpen, Briefcase } from 'lucide-react';
+import { ArrowLeft, ExternalLink, ShieldCheck, BookOpen, Briefcase, Plus } from 'lucide-react';
 import VerifiedBadge from '@/components/caselaw/VerifiedBadge';
 import CaseLawFormDialog from '@/components/caselaw/CaseLawFormDialog';
+import MainAuthorityDialog from '@/components/caselaw/MainAuthorityDialog';
+import CheckStatusBadge from '@/components/caselaw/CheckStatusBadge';
+import CheckPackButton from '@/components/caselaw/CheckPackButton';
+import CheckVerificationForm from '@/components/caselaw/CheckVerificationForm';
+import ExtractList from '@/components/caselaw/ExtractList';
 import { contextTypeLabel } from '@/lib/taxonomy';
 
 export default function CaseLawDetail() {
@@ -16,6 +21,7 @@ export default function CaseLawDetail() {
   const caseLawId = urlParams.get('id');
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [extractDialogOpen, setExtractDialogOpen] = useState(false);
 
   const { data: record, isLoading } = useQuery({
     queryKey: ['caseLaw', caseLawId],
@@ -37,6 +43,13 @@ export default function CaseLawDetail() {
     queryFn: () => base44.entities.CaseLawUsage.filter({ case_law_id: caseLawId }),
     enabled: !!caseLawId,
   });
+
+  const { data: extracts = [] } = useQuery({
+    queryKey: ['authorityExtracts'],
+    queryFn: () => base44.entities.AuthorityExtract.list('-added_date'),
+  });
+
+  const recordExtracts = extracts.filter((extract) => extract.case_law_id === caseLawId);
 
   const judgmentIds = [...new Set(citations.map((citation) => citation.judgment_id))];
   const { data: judgments = [] } = useQuery({
@@ -99,6 +112,7 @@ export default function CaseLawDetail() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900 mb-2">{record.name}</h1>
             <div className="flex flex-wrap items-center gap-2">
+              {record.is_main === true && <CheckStatusBadge record={record} />}
               <VerifiedBadge verified={record.verified} />
               {record.neutral_citation && (
                 <span className="font-mono text-sm text-slate-600">{record.neutral_citation}</span>
@@ -110,7 +124,14 @@ export default function CaseLawDetail() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {(record.is_main === true || recordExtracts.length > 0) && (
+              <CheckPackButton record={record} extracts={recordExtracts} />
+            )}
+            <Button variant="outline" onClick={() => setExtractDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add extract
+            </Button>
             {record.verified !== true && (
               <Button
                 variant="outline"
@@ -123,9 +144,9 @@ export default function CaseLawDetail() {
             <Button variant="outline" onClick={() => setDialogOpen(true)}>
               Edit
             </Button>
-            {record.url && (
+            {(record.official_url || record.url) && (
               <Button asChild>
-                <a href={record.url} target="_blank" rel="noopener noreferrer">
+                <a href={record.official_url || record.url} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   Primary source
                 </a>
@@ -143,6 +164,30 @@ export default function CaseLawDetail() {
               <p className="text-slate-700 leading-relaxed">{record.summary}</p>
             </CardContent>
           </Card>
+        )}
+
+        {(record.is_main === true || recordExtracts.length > 0) && (
+          <Card className="mb-6 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Paragraph extracts ({recordExtracts.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ExtractList extracts={recordExtracts} />
+              <p className="text-xs text-slate-500 mt-3">
+                Arguments and documents quote only this wording, with the case name, neutral citation and paragraph reference.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {(record.is_main === true || recordExtracts.length > 0) && (
+          <CheckVerificationForm
+            record={record}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ['caseLaw'] });
+              queryClient.invalidateQueries({ queryKey: ['caseLaw', caseLawId] });
+            }}
+          />
         )}
 
         <Card className="mb-6 shadow-sm">
@@ -257,6 +302,18 @@ export default function CaseLawDetail() {
           initial={record}
           onSave={saveMutation}
           isSaving={false}
+        />
+
+        <MainAuthorityDialog
+          open={extractDialogOpen}
+          onOpenChange={setExtractDialogOpen}
+          initial={record}
+          matters={[]}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['caseLaw'] });
+            queryClient.invalidateQueries({ queryKey: ['caseLaw', caseLawId] });
+            queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });
+          }}
         />
       </div>
     </div>

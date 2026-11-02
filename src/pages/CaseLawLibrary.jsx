@@ -1,26 +1,36 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Scale, Pencil } from 'lucide-react';
+import { Plus, Search, Scale, Gavel } from 'lucide-react';
 import CaseLawFormDialog from '@/components/caselaw/CaseLawFormDialog';
-import VerifiedBadge from '@/components/caselaw/VerifiedBadge';
+import MainAuthorityDialog from '@/components/caselaw/MainAuthorityDialog';
+import CaseLawCard from '@/components/caselaw/CaseLawCard';
 
 export default function CaseLawLibrary() {
   const [search, setSearch] = useState('');
   const [verifiedFilter, setVerifiedFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [mainDialogOpen, setMainDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: caseLaw = [], isLoading } = useQuery({
     queryKey: ['caseLaw'],
     queryFn: () => base44.entities.CaseLaw.list('-created_date'),
+  });
+
+  const { data: extracts = [] } = useQuery({
+    queryKey: ['authorityExtracts'],
+    queryFn: () => base44.entities.AuthorityExtract.list('-added_date'),
+  });
+
+  const { data: matters = [] } = useQuery({
+    queryKey: ['matters', 'all'],
+    queryFn: () => base44.entities.Matter.list('-created_date'),
   });
 
   const saveMutation = useMutation({
@@ -49,14 +59,29 @@ export default function CaseLawLibrary() {
     return matchesTerm && matchesVerified;
   });
 
+  const extractsFor = (id) => extracts.filter((extract) => extract.case_law_id === id);
+  const mainAuthorities = filtered.filter((record) => record.is_main === true);
+  const otherAuthorities = filtered.filter((record) => record.is_main !== true);
+
   const openAdd = () => {
     setEditing(null);
     setDialogOpen(true);
   };
 
+  const openAddMain = () => {
+    setEditing(null);
+    setMainDialogOpen(true);
+  };
+
   const openEdit = (record) => {
     setEditing(record);
-    setDialogOpen(true);
+    if (record.is_main === true) setMainDialogOpen(true);
+    else setDialogOpen(true);
+  };
+
+  const refreshMain = () => {
+    queryClient.invalidateQueries({ queryKey: ['caseLaw'] });
+    queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });
   };
 
   return (
@@ -69,10 +94,16 @@ export default function CaseLawLibrary() {
               One master record per authority. Unverified records are shown in amber.
             </p>
           </div>
-          <Button onClick={openAdd} className="bg-slate-900 hover:bg-slate-800">
-            <Plus className="h-4 w-4 mr-2" />
-            Add authority
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={openAddMain} className="bg-slate-900 hover:bg-slate-800">
+              <Gavel className="h-4 w-4 mr-2" />
+              Add main authority
+            </Button>
+            <Button onClick={openAdd} variant="outline">
+              <Plus className="h-4 w-4 mr-2" />
+              Add authority
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -107,49 +138,62 @@ export default function CaseLawLibrary() {
               <Scale className="h-16 w-16 text-slate-300 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-slate-900 mb-2">No authorities found</h3>
               <p className="text-slate-600 mb-4">
-                Add an authority manually, or parse one out of a judgment.
+                Add a main authority with its paragraph extracts, or parse one out of a judgment.
               </p>
-              <Button onClick={openAdd} variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Add authority
+              <Button onClick={openAddMain} variant="outline">
+                <Gavel className="h-4 w-4 mr-2" />
+                Add main authority
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {filtered.map((record) => (
-              <Card
-                key={record.id}
-                className={`shadow-sm ${record.verified ? 'border-l-4 border-l-green-500' : 'border-l-4 border-l-amber-500 bg-amber-50/40'}`}
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <Link
-                        to={createPageUrl('CaseLawDetail') + '?id=' + record.id}
-                        className="text-lg font-semibold text-slate-900 hover:underline"
-                      >
-                        {record.name}
-                      </Link>
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        <VerifiedBadge verified={record.verified} />
-                        {record.neutral_citation && (
-                          <span className="text-sm font-mono text-slate-600">{record.neutral_citation}</span>
-                        )}
-                        {record.court && <span className="text-sm text-slate-500">{record.court}</span>}
-                        {record.year && <span className="text-sm text-slate-500">{record.year}</span>}
-                      </div>
-                      {record.summary && (
-                        <p className="text-sm text-slate-600 mt-2 line-clamp-2">{record.summary}</p>
-                      )}
-                    </div>
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(record)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="space-y-8">
+            <section>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Main Authorities ({mainAuthorities.length})
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Listed first in every argument. Quoted only from stored extracts.
+                </p>
+              </div>
+              {mainAuthorities.length === 0 ? (
+                <Card>
+                  <CardContent className="p-6 text-sm text-slate-600">
+                    No main authority yet. Add one with paragraph extracts to quote it safely in arguments.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {mainAuthorities.map((record) => (
+                    <CaseLawCard
+                      key={record.id}
+                      record={record}
+                      extracts={extractsFor(record.id)}
+                      onEdit={openEdit}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {otherAuthorities.length > 0 && (
+              <section>
+                <h2 className="text-xl font-semibold text-slate-900 mb-3">
+                  Other authorities ({otherAuthorities.length})
+                </h2>
+                <div className="space-y-3">
+                  {otherAuthorities.map((record) => (
+                    <CaseLawCard
+                      key={record.id}
+                      record={record}
+                      extracts={[]}
+                      onEdit={openEdit}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
 
@@ -162,6 +206,17 @@ export default function CaseLawLibrary() {
           initial={editing}
           onSave={(data) => saveMutation.mutate(data)}
           isSaving={saveMutation.isPending}
+        />
+
+        <MainAuthorityDialog
+          open={mainDialogOpen}
+          onOpenChange={(open) => {
+            setMainDialogOpen(open);
+            if (!open) setEditing(null);
+          }}
+          initial={editing && editing.is_main === true ? editing : null}
+          matters={matters}
+          onSaved={refreshMain}
         />
       </div>
     </div>

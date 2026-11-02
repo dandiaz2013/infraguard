@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle, Link as LinkIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import AICoach from '../components/AICoach';
+import ExtractCheckPanel from '@/components/authorities/ExtractCheckPanel';
 import fileToBase64 from '@/lib/fileToBase64';
 
 export default function ArgumentBuilder() {
@@ -60,6 +61,18 @@ export default function ArgumentBuilder() {
     queryFn: () => base44.entities.LegalAuthority.filter({ matter_id: selectedMatter }),
     enabled: !!selectedMatter
   });
+
+  const { data: mainAuthorities = [] } = useQuery({
+    queryKey: ['caseLaw'],
+    queryFn: () => base44.entities.CaseLaw.list('-created_date')
+  });
+
+  const { data: authorityExtracts = [] } = useQuery({
+    queryKey: ['authorityExtracts'],
+    queryFn: () => base44.entities.AuthorityExtract.list('-added_date')
+  });
+
+  const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
 
   // Load last saved argument version when matter changes
   React.useEffect(() => {
@@ -230,6 +243,21 @@ export default function ArgumentBuilder() {
           citation: a.citation,
           legal_principle: a.legal_principle,
           status: a.tags?.find(t => ['Active', 'Overruled'].includes(t)) || 'Active'
+        })),
+        main_authorities: mainAuthorityPool.map((record) => ({
+          name: record.name,
+          citation: record.neutral_citation || '',
+          court: record.court || '',
+          year: record.year || null,
+          official_url: record.official_url || record.url || '',
+          checked: record.check_status === 'Extract checked against official text',
+          extracts: authorityExtracts
+            .filter((extract) => extract.case_law_id === record.id)
+            .map((extract) => ({
+              paragraph_ref: extract.paragraph_ref,
+              extract_text: extract.extract_text,
+              proposition: extract.proposition || ''
+            }))
         })),
         documents: uploadedDocuments.map((doc, idx) => ({
           name: doc.name,
@@ -556,6 +584,14 @@ export default function ArgumentBuilder() {
                 </div>
               )}
 
+              {mainAuthorityPool.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-900 font-medium">
+                    ✓ {mainAuthorityPool.length} main {mainAuthorityPool.length === 1 ? 'authority' : 'authorities'} cited first, quotable only from {authorityExtracts.length} stored extract{authorityExtracts.length === 1 ? '' : 's'}
+                  </p>
+                </div>
+              )}
+
               <Button
                 onClick={handleGenerate}
                 disabled={isGenerating || !factPattern.trim() || !selectedMatter}
@@ -625,6 +661,18 @@ export default function ArgumentBuilder() {
             </CardContent>
           </Card>
         </div>
+
+        {generatedArgument && generatedArgument.full_argument_markdown && (
+          <div className="mt-6">
+            <ExtractCheckPanel
+              text={generatedArgument.full_argument_markdown}
+              extracts={authorityExtracts.filter((extract) =>
+                mainAuthorityPool.some((record) => record.id === extract.case_law_id)
+              )}
+              mainAuthorities={mainAuthorityPool}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

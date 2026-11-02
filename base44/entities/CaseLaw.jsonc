@@ -26,6 +26,10 @@
       "type": "string",
       "description": "Link to the primary source"
     },
+    "official_url": {
+      "type": "string",
+      "description": "Official page used to check the extracts"
+    },
     "summary": {
       "type": "string",
       "description": "Short summary of the decision"
@@ -56,6 +60,29 @@
       "type": "boolean",
       "default": false,
       "description": "Checked against a primary source by a user"
+    },
+    "is_main": {
+      "type": "boolean",
+      "default": false,
+      "description": "Main authority, carries verbatim paragraph extracts"
+    },
+    "check_status": {
+      "type": "string",
+      "enum": [
+        "Not checked",
+        "Extract checked against official text"
+      ],
+      "default": "Not checked",
+      "description": "Whether the user has compared the stored extracts with the official judgment"
+    },
+    "checked_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the extracts were compared with the official text"
+    },
+    "checked_notes": {
+      "type": "string",
+      "description": "User note recorded when checking the extracts"
     },
     "source_note": {
       "type": "string",

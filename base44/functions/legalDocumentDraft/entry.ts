@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
+import { buildMainAuthorityBlock, MAIN_AUTHORITY_RULES } from '../../shared/mainAuthorities.ts';
 
 const DOCUMENT_PROMPTS: Record<string, string> = {
   'Particulars of Claim': 'Draft comprehensive Particulars of Claim following CPR rules for UK civil litigation. Include proper headings, numbered paragraphs, clear statement of facts, legal basis for claim, and prayer for relief.',
@@ -32,6 +33,7 @@ Deno.serve(async (req) => {
       : '';
 
     const authorities = Array.isArray(body.authorities) ? body.authorities.slice(0, 40) : [];
+    const mainAuthorities = Array.isArray(body.main_authorities) ? body.main_authorities.slice(0, 20) : [];
     const authoritiesContext = authorities.length > 0
       ? `\n\nRelevant Legal Authorities:\n${authorities
         .map((a) => `- ${a.title || ''} (${a.citation || ''})\n  Legal Principle: ${a.legal_principle || ''}\n  Relevance: ${a.relevance || ''}`)
@@ -43,7 +45,9 @@ Deno.serve(async (req) => {
 Briefing Notes:
 ${briefingNotes}
 ${argumentContext}
-${authoritiesContext}
+${authoritiesContext}${buildMainAuthorityBlock(mainAuthorities)}
+
+${MAIN_AUTHORITY_RULES}
 
 Requirements:
 - Use formal UK legal language and formatting

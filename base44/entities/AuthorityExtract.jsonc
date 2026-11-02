@@ -1,0 +1,93 @@
+{
+  "name": "AuthorityExtract",
+  "type": "object",
+  "properties": {
+    "case_law_id": {
+      "type": "string",
+      "description": "The Case Law Library record this extract belongs to"
+    },
+    "paragraph_ref": {
+      "type": "string",
+      "description": "Paragraph reference, e.g. \"para 21\" or \"paras 40-42\""
+    },
+    "extract_text": {
+      "type": "string",
+      "description": "Exact wording of the paragraph, as pasted"
+    },
+    "proposition": {
+      "type": "string",
+      "description": "One line stating what this paragraph is used for"
+    },
+    "source_file_url": {
+      "type": "string",
+      "description": "Private storage URI of the .txt file the extract was taken from"
+    },
+    "matter_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Matters this extract has been linked to"
+    },
+    "added_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the extract was added"
+    }
+  },
+  "required": [
+    "case_law_id",
+    "paragraph_ref",
+    "extract_text"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}
