@@ -98,6 +98,169 @@
     "parent_version_id": {
       "type": "string",
       "description": "ID of previous version if this is a revision"
+    },
+    "our_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "document_name": {
+            "type": "string"
+          },
+          "paragraph_ref": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "added_date": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Our points, each with an optional document and paragraph reference"
+    },
+    "contract_clauses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reference": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "document_name": {
+            "type": "string"
+          },
+          "checked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Contract clauses or rules relied on, with whether the wording has been checked"
+    },
+    "misstatements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string"
+          },
+          "correct_position": {
+            "type": "string"
+          },
+          "document_name": {
+            "type": "string"
+          },
+          "paragraph_ref": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Statements by the other side that our documents contradict"
+    },
+    "procedural": {
+      "type": "object",
+      "properties": {
+        "court_confirmed": {
+          "type": "boolean"
+        },
+        "route_confirmed": {
+          "type": "boolean"
+        },
+        "time_limit_confirmed": {
+          "type": "boolean"
+        }
+      },
+      "description": "Which procedural points the user has confirmed from the documents"
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "affects": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "document_name": {
+            "type": "string"
+          },
+          "evidence_text": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "conflict": {
+            "type": "string"
+          },
+          "conflict_detail": {
+            "type": "string"
+          },
+          "conflict_resolution": {
+            "type": "string"
+          },
+          "round": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "Preparation questions and the user's answers for this version"
+    },
+    "question_round": {
+      "type": "number",
+      "description": "How many question rounds have been run (initial plus follow-ups, maximum three)"
+    },
+    "prospects": {
+      "type": "object",
+      "properties": {
+        "rating": {
+          "type": "string"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "checklist": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "assessment": {
+          "type": "object"
+        },
+        "generated_at": {
+          "type": "string"
+        }
+      },
+      "description": "Checklist result, rating and AI assessment saved with this version"
     }
   },
   "required": [

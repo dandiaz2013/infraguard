@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 import { buildMainAuthorityBlock, MAIN_AUTHORITY_RULES } from '../../shared/mainAuthorities.ts';
+import { buildAnswers, buildOurPoints, buildClauses, buildMisstatements } from '../../shared/argumentContext.ts';
 
 const EXPANSION_LABELS = [
   ['chronology', 'Chronology (Key Events)'],
@@ -58,6 +59,10 @@ Deno.serve(async (req) => {
     const authorities = Array.isArray(body.authorities) ? body.authorities.slice(0, 40) : [];
     const documents = Array.isArray(body.documents) ? body.documents.slice(0, 10) : [];
     const mainAuthorities = Array.isArray(body.main_authorities) ? body.main_authorities.slice(0, 20) : [];
+    const questionAnswers = Array.isArray(body.question_answers) ? body.question_answers.slice(0, 30) : [];
+    const ourPoints = Array.isArray(body.our_points) ? body.our_points.slice(0, 40) : [];
+    const contractClauses = Array.isArray(body.contract_clauses) ? body.contract_clauses.slice(0, 30) : [];
+    const misstatements = Array.isArray(body.misstatements) ? body.misstatements.slice(0, 30) : [];
     const expansions = buildExpansions(body.expansions);
     const issueContext = issueTitle ? `\n\nLegal Issue: ${issueTitle}` : '';
 
@@ -77,12 +82,16 @@ YOU MUST:
 ## Core Fact Pattern (Auto-Populated from Matter)
 ${factPattern}
 
-${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}
+${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}
 
 ## Instructions to AI
 ${MAIN_AUTHORITY_RULES}
 
 When generating arguments:
+- Treat the ANSWERS TO THE PREPARATION QUESTIONS as established facts for this version, and write nothing that is not in the material above
+- Use OUR POINTS as the spine of the argument, and mark any point with no document reference as [USER STATEMENT - NO DOCUMENT REFERENCE]
+- Where a contract clause is relied on, quote it from CONTRACT CLAUSES AND RULES RELIED ON; if the clause text is missing write [RULE TEXT NEEDED]
+- Where a fact is needed but not in the material, write [FACT NEEDED: describe what is needed] instead of inventing it
 - Treat auto-populated Matter facts as accurate unless contradicted
 - Prioritise user-added expansions
 - Identify legally material facts

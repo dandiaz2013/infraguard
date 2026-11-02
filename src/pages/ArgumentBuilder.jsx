@@ -11,6 +11,12 @@ import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle, Link 
 import ReactMarkdown from 'react-markdown';
 import AICoach from '../components/AICoach';
 import ExtractCheckPanel from '@/components/authorities/ExtractCheckPanel';
+import QuestionStage from '@/components/argument/QuestionStage';
+import CaseMaterialPanel from '@/components/argument/CaseMaterialPanel';
+import ProspectsPanel from '@/components/argument/ProspectsPanel';
+import ImproveActions from '@/components/argument/ImproveActions';
+import { computeProspects } from '@/lib/prospectsChecklist';
+import { useNavigate } from 'react-router-dom';
 import fileToBase64 from '@/lib/fileToBase64';
 
 export default function ArgumentBuilder() {
@@ -33,8 +39,20 @@ export default function ArgumentBuilder() {
   const [currentArgumentVersion, setCurrentArgumentVersion] = useState(null);
   const [isLoadingLastVersion, setIsLoadingLastVersion] = useState(false);
   const [linkedDocuments, setLinkedDocuments] = useState({});
+  const [questions, setQuestions] = useState([]);
+  const [questionRound, setQuestionRound] = useState(0);
+  const [isAsking, setIsAsking] = useState(false);
+  const [conflictBusy, setConflictBusy] = useState(false);
+  const [attachingIndex, setAttachingIndex] = useState(-1);
+  const [ourPoints, setOurPoints] = useState([]);
+  const [clauses, setClauses] = useState([]);
+  const [misstatements, setMisstatements] = useState([]);
+  const [procedural, setProcedural] = useState({});
+  const [assessment, setAssessment] = useState(null);
+  const [isAssessing, setIsAssessing] = useState(false);
 
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: matters = [] } = useQuery({
     queryKey: ['matters'],
@@ -73,6 +91,18 @@ export default function ArgumentBuilder() {
   });
 
   const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
+
+  const { data: argumentVersions = [] } = useQuery({
+    queryKey: ['argumentVersions', selectedMatter],
+    queryFn: async () => {
+      const page = await base44.entities.Argument.filter(
+        { matter_id: selectedMatter },
+        { sort: '-version_number', limit: 30 }
+      );
+      return page.items || [];
+    },
+    enabled: !!selectedMatter
+  });
 
   // Load last saved argument version when matter changes
   React.useEffect(() => {
@@ -138,6 +168,14 @@ export default function ArgumentBuilder() {
         if (lastVersion.argument_text) {
           setGeneratedArgument({ full_argument_markdown: lastVersion.argument_text });
         }
+
+        setQuestions(lastVersion.questions || []);
+        setQuestionRound(lastVersion.question_round || 0);
+        setOurPoints(lastVersion.our_points || []);
+        setClauses(lastVersion.contract_clauses || []);
+        setMisstatements(lastVersion.misstatements || []);
+        setProcedural(lastVersion.procedural || {});
+        setAssessment(lastVersion.prospects?.assessment || null);
 
         setHasUnsavedChanges(false);
       }
@@ -259,6 +297,19 @@ export default function ArgumentBuilder() {
               proposition: extract.proposition || ''
             }))
         })),
+        question_answers: questions
+          .filter((question) => (question.answer || '').trim() || question.status)
+          .map((question) => ({
+            question: question.question,
+            answer: question.answer,
+            status: question.status,
+            quote: question.quote,
+            document_name: question.document_name,
+            conflict_resolution: question.conflict_resolution
+          })),
+        our_points: ourPoints,
+        contract_clauses: clauses,
+        misstatements,
         documents: uploadedDocuments.map((doc, idx) => ({
           name: doc.name,
           content: doc.content,
@@ -300,6 +351,214 @@ export default function ArgumentBuilder() {
     }
   };
 
+  const prospects = computeProspects({
+    text: generatedArgument?.full_argument_markdown || '',
+    questions,
+    ourPoints,
+    clauses,
+    misstatements,
+    procedural,
+    caseLaw: mainAuthorities,
+    extracts: authorityExtracts
+  });
+
+  const prospectsHistory = argumentVersions
+    .filter((record) => record.prospects?.rating)
+    .slice()
+    .sort((a, b) => (a.version_number || 0) - (b.version_number || 0))
+    .map((record) => ({ version: record.version_number, rating: record.prospects.rating }));
+
+  const updateQuestion = (index, patch) => {
+    setQuestions((prev) => prev.map((question, position) => (position === index ? { ...question, ...patch } : question)));
+  };
+
+  const questionPayload = () => ({
+    matter_id: selectedMatter,
+    position,
+    fact_pattern: factPattern,
+    our_points: ourPoints,
+    contract_clauses: clauses,
+    misstatements
+  });
+
+  const handleAskQuestions = async () => {
+    if (!selectedMatter) {
+      alert('Select a matter first');
+      return;
+    }
+    setIsAsking(true);
+    try {
+      const response = await base44.functions.invoke('argumentQuestions', { ...questionPayload(), mode: 'questions' });
+      if (response.data?.error) throw new Error(response.data.error);
+      const asked = (response.data.questions || []).map((question) => ({
+        ...question,
+        answer: '',
+        quote: '',
+        document_name: '',
+        status: 'Open',
+        conflict: '',
+        conflict_detail: '',
+        conflict_resolution: '',
+        round: 1
+      }));
+      setQuestions(asked);
+      setQuestionRound(1);
+    } catch (error) {
+      alert(`Could not prepare questions: ${error.message}`);
+    } finally {
+      setIsAsking(false);
+    }
+  };
+
+  const handleFollowUp = async () => {
+    if (!selectedMatter || questionRound >= 3) return;
+    setIsAsking(true);
+    try {
+      const nextRound = questionRound + 1;
+      const response = await base44.functions.invoke('argumentQuestions', {
+        ...questionPayload(),
+        mode: 'followup',
+        round: nextRound,
+        questions
+      });
+      if (response.data?.error) throw new Error(response.data.error);
+      const asked = (response.data.questions || []).map((question) => ({
+        ...question,
+        answer: '',
+        quote: '',
+        document_name: '',
+        status: 'Open',
+        conflict: '',
+        conflict_detail: '',
+        conflict_resolution: '',
+        round: nextRound
+      }));
+      setQuestions([...questions, ...asked]);
+      setQuestionRound(nextRound);
+    } catch (error) {
+      alert(`Could not prepare follow-up questions: ${error.message}`);
+    } finally {
+      setIsAsking(false);
+    }
+  };
+
+  const handleCheckConflicts = async () => {
+    const answered = questions
+      .map((question, index) => ({ ...question, index }))
+      .filter((question) => (question.answer || '').trim());
+
+    if (answered.length === 0) {
+      alert('Answer at least one question first');
+      return;
+    }
+
+    setConflictBusy(true);
+    try {
+      const response = await base44.functions.invoke('argumentQuestions', {
+        mode: 'conflict',
+        matter_id: selectedMatter,
+        answers: answered.map((question) => ({
+          index: question.index,
+          question: question.question,
+          answer: question.answer,
+          quote: question.quote,
+          document_name: question.document_name,
+          evidence_text: question.evidence_text
+        }))
+      });
+      if (response.data?.error) throw new Error(response.data.error);
+      const results = response.data.results || [];
+      setQuestions((prev) =>
+        prev.map((question, index) => {
+          const result = results.find((entry) => entry.index === index);
+          if (!result) return question;
+          return {
+            ...question,
+            conflict: result.conflict ? result.conflict_detail : '',
+            conflict_detail: result.conflict_detail || '',
+            conflict_resolution: result.conflict ? '' : question.conflict_resolution
+          };
+        })
+      );
+    } catch (error) {
+      alert(`Conflict check failed: ${error.message}`);
+    } finally {
+      setConflictBusy(false);
+    }
+  };
+
+  const handleAttachQuestionDoc = async (index, file) => {
+    setAttachingIndex(index);
+    try {
+      const fileBase64 = await fileToBase64(file);
+      const response = await base44.functions.invoke('documentTextExtract', { fileName: file.name, fileBase64 });
+      updateQuestion(index, {
+        document_name: file.name,
+        evidence_text: (response.data?.text || '').slice(0, 4000)
+      });
+    } catch (error) {
+      alert('Could not read that document');
+    } finally {
+      setAttachingIndex(-1);
+    }
+  };
+
+  const convertAnswerToPoint = (index) => {
+    const question = questions[index];
+    if (!question || !(question.answer || '').trim()) return;
+    setOurPoints([
+      ...ourPoints,
+      {
+        text: question.answer.trim(),
+        document_name: question.document_name || '',
+        paragraph_ref: '',
+        source: 'Answer',
+        added_date: new Date().toISOString()
+      }
+    ]);
+  };
+
+  const handleAssess = async () => {
+    if (!generatedArgument || !selectedMatter) {
+      alert('Generate or open an argument version first');
+      return;
+    }
+    setIsAssessing(true);
+    try {
+      const response = await base44.functions.invoke('argumentProspects', {
+        matter_id: selectedMatter,
+        position,
+        argument_text: generatedArgument.full_argument_markdown,
+        checklist: prospects.checklist,
+        our_points: ourPoints,
+        contract_clauses: clauses,
+        misstatements
+      });
+      if (response.data?.error) throw new Error(response.data.error);
+      setAssessment(response.data.assessment || null);
+    } catch (error) {
+      alert(`Assessment failed: ${error.message}`);
+    } finally {
+      setIsAssessing(false);
+    }
+  };
+
+  const handleImproveAction = (type) => {
+    if (type === 'document') {
+      document.getElementById('documents')?.click();
+    } else if (type === 'authority') {
+      navigate('/CaseLawLibrary');
+    } else if (type === 'point') {
+      document.getElementById('material-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('point-input')?.focus();
+    } else if (type === 'clause') {
+      document.getElementById('material-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('clause-reference')?.focus();
+    } else {
+      document.getElementById('question-stage')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleSave = async () => {
     if (!generatedArgument || !selectedMatter || !currentMatter) {
       alert('Please generate an argument first');
@@ -328,6 +587,13 @@ export default function ArgumentBuilder() {
         },
         argument_text: generatedArgument.full_argument_markdown,
         authorities: authorities.map(a => a.id),
+        our_points: ourPoints,
+        contract_clauses: clauses,
+        misstatements,
+        procedural,
+        questions,
+        question_round: questionRound,
+        prospects: { ...prospects, ...(assessment ? { assessment } : {}), generated_at: new Date().toISOString() },
         status: 'Draft',
         parent_version_id: currentArgumentVersion?.id
       });
@@ -661,6 +927,66 @@ export default function ArgumentBuilder() {
             </CardContent>
           </Card>
         </div>
+
+        {selectedMatter && (
+          <div id="material-panel" className="mt-6">
+            <CaseMaterialPanel
+              ourPoints={ourPoints}
+              onAddPoint={(point) => setOurPoints([...ourPoints, { ...point, source: 'Manual', added_date: new Date().toISOString() }])}
+              onRemovePoint={(index) => setOurPoints(ourPoints.filter((_, position) => position !== index))}
+              clauses={clauses}
+              onAddClause={(clause) => setClauses([...clauses, clause])}
+              onRemoveClause={(index) => setClauses(clauses.filter((_, position) => position !== index))}
+              onToggleClause={(index) =>
+                setClauses(clauses.map((clause, position) => (position === index ? { ...clause, checked: !clause.checked } : clause)))
+              }
+              misstatements={misstatements}
+              onAddMisstatement={(entry) => setMisstatements([...misstatements, entry])}
+              onRemoveMisstatement={(index) => setMisstatements(misstatements.filter((_, position) => position !== index))}
+              procedural={procedural}
+              onProceduralChange={setProcedural}
+            />
+          </div>
+        )}
+
+        <div id="question-stage" className="mt-6">
+          <QuestionStage
+            questions={questions}
+            round={questionRound}
+            busy={isAsking}
+            conflictBusy={conflictBusy}
+            conflictChecked={questions.some((question) => question.conflict)}
+            hasMatter={Boolean(selectedMatter)}
+            onChange={updateQuestion}
+            onConvert={convertAnswerToPoint}
+            onAttach={handleAttachQuestionDoc}
+            attachingIndex={attachingIndex}
+            onAsk={handleAskQuestions}
+            onFollowUp={handleFollowUp}
+            onCheckConflicts={handleCheckConflicts}
+            onDraft={handleGenerate}
+          />
+        </div>
+
+        {selectedMatter && (
+          <>
+            <div className="mt-6">
+              <ProspectsPanel
+                prospects={prospects}
+                assessment={assessment}
+                isAssessing={isAssessing}
+                onAssess={handleAssess}
+                savedRating={currentArgumentVersion?.prospects?.rating || ''}
+                history={prospectsHistory}
+                canAssess={Boolean(generatedArgument)}
+              />
+            </div>
+
+            <div className="mt-6">
+              <ImproveActions actions={prospects.actions} onAction={handleImproveAction} />
+            </div>
+          </>
+        )}
 
         {generatedArgument && generatedArgument.full_argument_markdown && (
           <div className="mt-6">
