@@ -1,0 +1,177 @@
+{
+  "name": "GapAnalysis",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter the gap analysis was run for"
+    },
+    "argument_id": {
+      "type": "string",
+      "description": "Argument version it was run from, if any"
+    },
+    "test_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Confirmed legal tests covered by this run"
+    },
+    "element_results": {
+      "type": "array",
+      "description": "Coverage of each element of each confirmed test",
+      "items": {
+        "type": "object",
+        "properties": {
+          "test_id": {
+            "type": "string"
+          },
+          "test_name": {
+            "type": "string"
+          },
+          "element_number": {
+            "type": "number"
+          },
+          "element_text": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "covered_where": {
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "string"
+          },
+          "bridge": {
+            "type": "string"
+          },
+          "other_side": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "point_results": {
+      "type": "array",
+      "description": "Coverage of each of Our points",
+      "items": {
+        "type": "object"
+      }
+    },
+    "gap_note": {
+      "type": "string",
+      "description": "Counsel's gap note, with the safety footer"
+    },
+    "fact_list": {
+      "type": "array",
+      "description": "Supplementary witness statement fact list, with the user's answers",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "element": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "document_name": {
+            "type": "string"
+          },
+          "paragraph_ref": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Counts of covered, partly covered and not covered elements",
+      "properties": {
+        "total": {
+          "type": "number"
+        },
+        "covered": {
+          "type": "number"
+        },
+        "partly": {
+          "type": "number"
+        },
+        "not_covered": {
+          "type": "number"
+        }
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the analysis was run"
+    }
+  },
+  "required": [
+    "matter_id"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

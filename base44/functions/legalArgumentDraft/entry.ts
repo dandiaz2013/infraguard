@@ -26,6 +26,24 @@ function buildAuthorities(authorities: Record<string, string>[]) {
     .join('\n\n')}`;
 }
 
+function buildLegalTests(tests: Record<string, unknown>[]) {
+  if (!Array.isArray(tests) || tests.length === 0) return '';
+  const blocks = tests.map((test, index) => {
+    const elements = Array.isArray(test.elements) ? (test.elements as Record<string, string>[]) : [];
+    const lines = [`TEST ${index + 1}: ${test.name || 'unnamed test'}${test.source_name ? ` (${test.source_name})` : ''}`];
+    elements.forEach((element, position) => {
+      const source = element.source_document_name
+        ? ` [source: ${element.source_document_name}, ${element.source_paragraph_ref || 'paragraph not recorded'}]`
+        : element.source_extract_ref
+          ? ` [source: stored extract ${element.source_extract_ref}]`
+          : '';
+      lines.push(`  Element ${position + 1}: ${element.text || 'no text'}${source}`);
+    });
+    return lines.join('\n');
+  });
+  return `\n\n## CONFIRMED LEGAL TESTS - the argument must be organised element by element under each\n${blocks.join('\n\n')}`;
+}
+
 function buildDocuments(documents: Record<string, unknown>[]) {
   if (documents.length === 0) return '';
   return `\n\n## Uploaded Documents\n${documents
@@ -33,8 +51,9 @@ function buildDocuments(documents: Record<string, unknown>[]) {
       const linkedTo = Array.isArray(doc.linked_to) && doc.linked_to.length > 0
         ? ` (Linked to: ${(doc.linked_to as string[]).join(', ')})`
         : '';
-      const content = typeof doc.content === 'string' ? doc.content.slice(0, 3000) : '';
-      return `### Document ${idx + 1}: ${doc.name || 'Untitled'}${linkedTo}\n${content}`;
+      const content = typeof doc.content === 'string' ? doc.content.slice(0, 5000) : '';
+      const id = doc.id ? ` [document id: ${doc.id}]` : '';
+      return `### Document ${idx + 1}: ${doc.name || 'Untitled'}${id}${linkedTo}\n${content}`;
     })
     .join('\n\n')}`;
 }
@@ -63,6 +82,7 @@ Deno.serve(async (req) => {
     const ourPoints = Array.isArray(body.our_points) ? body.our_points.slice(0, 40) : [];
     const contractClauses = Array.isArray(body.contract_clauses) ? body.contract_clauses.slice(0, 30) : [];
     const misstatements = Array.isArray(body.misstatements) ? body.misstatements.slice(0, 30) : [];
+    const legalTests = Array.isArray(body.legal_tests) ? body.legal_tests.slice(0, 4) : [];
     const expansions = buildExpansions(body.expansions);
     const issueContext = issueTitle ? `\n\nLegal Issue: ${issueTitle}` : '';
 
@@ -82,7 +102,7 @@ YOU MUST:
 ## Core Fact Pattern (Auto-Populated from Matter)
 ${factPattern}
 
-${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}
+${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}${buildLegalTests(legalTests)}
 
 ## Instructions to AI
 ${MAIN_AUTHORITY_RULES}
@@ -92,6 +112,12 @@ When generating arguments:
 - Use OUR POINTS as the spine of the argument, and mark any point with no document reference as [USER STATEMENT - NO DOCUMENT REFERENCE]
 - Where a contract clause is relied on, quote it from CONTRACT CLAUSES AND RULES RELIED ON; if the clause text is missing write [RULE TEXT NEEDED]
 - Where a fact is needed but not in the material, write [FACT NEEDED: describe what is needed] instead of inventing it
+- Where the draft needs a proposition from a main authority and no stored extract supports it, write [EXTRACT NEEDED: <case name>, <proposition>] and never state that proposition as law
+- When you rely on a main authority already in the library, quote its stored extract and state the proposition recorded with that extract
+- Refer to OUR documents ONLY in this structured form: {{DOC:<document id>|para:<number>}} or {{DOC:<document id>|page:<number>|lines:<a-b>}}, using a document id from the document list. Never describe a document reference in any other way, and never invent a document id, page, line or paragraph number
+- Organise the DETAILED ARGUMENT element by element under each confirmed legal test: a heading for the test, then a sub-heading for each element ("Element 1", "Element 2"), with the evidence for that element, its document references, and the conclusion on it. If the evidence for an element is missing write [FACT NEEDED: describe what is needed]
+- Never restate a legal test from memory: use the elements exactly as they are given
+- Give a paragraph number for one of our documents only when that number appears in the document text above. If it does not, use a page and line reference if the text shows them, otherwise write [DOCUMENT REFERENCE NEEDED: document name] instead of a paragraph number
 - Treat auto-populated Matter facts as accurate unless contradicted
 - Prioritise user-added expansions
 - Identify legally material facts
@@ -129,7 +155,10 @@ Generate a professional, court-ready legal argument with:
    - Summary of argument
    - Remedies requested
 
-Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.`;
+Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.
+
+End the draft with this exact line on its own:
+Draft for review. Check every authority and document reference against the originals before filing. Not legal advice.`;
 
     const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
       prompt,

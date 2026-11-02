@@ -41,6 +41,8 @@ export function computeProspects({
   procedural = {},
   caseLaw = [],
   extracts = [],
+  legalTests = [],
+  gap = null,
 } = {}) {
   const draft = String(text || '');
   const checklist = [];
@@ -214,6 +216,60 @@ export function computeProspects({
     )
   );
 
+  // 10. Legal test confirmed with its elements
+  const confirmedTests = (legalTests || []).filter((test) => test.status === 'Confirmed by user');
+  const testElements = confirmedTests.flatMap((test) => test.elements || []);
+  const confirmedElements = testElements.filter((element) => element.user_confirmed);
+  checklist.push(
+    makeItem(
+      'legal_test_confirmed',
+      'Confirmed legal test with its elements recorded',
+      'High',
+      confirmedTests.length === 0
+        ? 'No'
+        : testElements.length > 0 && confirmedElements.length === testElements.length
+          ? 'Yes'
+          : 'Partly',
+      confirmedTests.length === 0
+        ? 'No legal test has been confirmed for this matter.'
+        : `${confirmedTests.length} confirmed test${confirmedTests.length === 1 ? '' : 's'}, ${confirmedElements.length} of ${testElements.length} element${testElements.length === 1 ? '' : 's'} confirmed.`,
+      'Confirm the legal test and each of its elements from the stored extracts.',
+      'Medium',
+      'test'
+    )
+  );
+
+  // 11. Each element of the confirmed test covered by our evidence
+  const elementCounts = gap?.summary || {};
+  const totalElements = Number(elementCounts.total || 0);
+  const coveredElements = Number(elementCounts.covered || 0);
+  const partlyElements = Number(elementCounts.partly || 0);
+  const notCoveredElements = Number(elementCounts.not_covered || 0);
+  const uncoveredElement = (gap?.element_results || []).find((row) => row.status === 'Not covered');
+
+  checklist.push(
+    makeItem(
+      'elements_covered',
+      'Each element of the confirmed test covered by our evidence',
+      'High',
+      !gap || totalElements === 0
+        ? 'No'
+        : coveredElements === totalElements
+          ? 'Yes'
+          : coveredElements + partlyElements > 0
+            ? 'Partly'
+            : 'No',
+      !gap
+        ? 'No witness statement gap analysis has been run for this matter.'
+        : `${coveredElements} covered, ${partlyElements} partly covered, ${notCoveredElements} not covered (${totalElements} element${totalElements === 1 ? '' : 's'}).`,
+      uncoveredElement
+        ? `Add facts on element ${uncoveredElement.element_number}${uncoveredElement.test_name ? ` of ${uncoveredElement.test_name}` : ''} to a supplementary statement.`
+        : 'Run the witness statement gap analysis, then add the missing facts to a supplementary statement.',
+      'Medium',
+      'factlist'
+    )
+  );
+
   // Rating: base level from the checks, then the caps.
   const score =
     checklist.reduce((total, item) => total + (item.result === 'Yes' ? 1 : item.result === 'Partly' ? 0.5 : 0), 0) /
@@ -232,6 +288,11 @@ export function computeProspects({
   if (authorityUnchecked.result !== 'Yes' && index > 1) {
     index = 1;
     notes.push('Unchecked key authorities cap the rating at Arguable.');
+  }
+
+  if (confirmedTests.length === 0 && index > 1) {
+    index = 1;
+    notes.push('Without a confirmed legal test the rating is capped at Arguable.');
   }
 
   const fullyMet = checklist.filter((item) => item.result === 'Yes').length;

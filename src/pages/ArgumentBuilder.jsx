@@ -8,10 +8,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle, Link as LinkIcon } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
 import AICoach from '../components/AICoach';
-import ExtractCheckPanel from '@/components/authorities/ExtractCheckPanel';
 import QuestionStage from '@/components/argument/QuestionStage';
+import DraftBody from '@/components/argument/DraftBody';
+import AuthorityCheckPanel from '@/components/argument/AuthorityCheckPanel';
+import DocumentCheckPanel from '@/components/argument/DocumentCheckPanel';
+import ExtractNeededPanel from '@/components/argument/ExtractNeededPanel';
+import LegalTestsPanel from '@/components/argument/LegalTestsPanel';
+import ConfirmedTestsBanner from '@/components/argument/ConfirmedTestsBanner';
+import GapAnalysisPanel from '@/components/argument/GapAnalysisPanel';
 import CaseMaterialPanel from '@/components/argument/CaseMaterialPanel';
 import ProspectsPanel from '@/components/argument/ProspectsPanel';
 import ImproveActions from '@/components/argument/ImproveActions';
@@ -20,7 +25,8 @@ import { useNavigate } from 'react-router-dom';
 import fileToBase64 from '@/lib/fileToBase64';
 
 export default function ArgumentBuilder() {
-  const [selectedMatter, setSelectedMatter] = useState('');
+  const initialMatter = new URLSearchParams(window.location.search).get('matter') || '';
+  const [selectedMatter, setSelectedMatter] = useState(initialMatter);
   const [selectedIssue, setSelectedIssue] = useState('');
   const [factPattern, setFactPattern] = useState('');
   const [chronology, setChronology] = useState('');
@@ -89,6 +95,44 @@ export default function ArgumentBuilder() {
     queryKey: ['authorityExtracts'],
     queryFn: () => base44.entities.AuthorityExtract.list('-added_date')
   });
+
+  const { data: matterFiles = [] } = useQuery({
+    queryKey: ['matterFiles', selectedMatter],
+    queryFn: async () => {
+      const page = await base44.entities.MatterFile.filter({ matter_id: selectedMatter }, { limit: 30 });
+      return page.items || [];
+    },
+    enabled: !!selectedMatter
+  });
+
+  const { data: legalTests = [] } = useQuery({
+    queryKey: ['legalTests', selectedMatter],
+    queryFn: () => base44.entities.LegalTest.filter({ matter_id: selectedMatter }),
+    enabled: !!selectedMatter
+  });
+
+  const { data: gapAnalyses = [] } = useQuery({
+    queryKey: ['gapAnalyses', selectedMatter],
+    queryFn: async () => {
+      const page = await base44.entities.GapAnalysis.filter(
+        { matter_id: selectedMatter },
+        { sort: '-generated_at', limit: 5 }
+      );
+      return page.items || [];
+    },
+    enabled: !!selectedMatter
+  });
+
+  const latestGap = gapAnalyses[0] || null;
+  const confirmedTests = legalTests.filter((test) => test.status === 'Confirmed by user');
+
+  const documentPool = React.useMemo(
+    () => [
+      ...matterFiles.map((file) => ({ id: file.id, name: file.file_name, text: file.text || '' })),
+      ...uploadedDocuments.map((doc, index) => ({ id: `upload-${index + 1}`, name: doc.name, text: doc.content || '' })),
+    ],
+    [matterFiles, uploadedDocuments]
+  );
 
   const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
 
@@ -310,13 +354,29 @@ export default function ArgumentBuilder() {
         our_points: ourPoints,
         contract_clauses: clauses,
         misstatements,
-        documents: uploadedDocuments.map((doc, idx) => ({
-          name: doc.name,
-          content: doc.content,
-          linked_to: Object.entries(linkedDocuments)
-            .filter(([, docs]) => docs.includes(idx))
-            .map(([point]) => point)
-        }))
+        legal_tests: confirmedTests.map((test) => ({
+          name: test.name,
+          source_name: mainAuthorities.find((record) => record.id === test.source_case_law_id)?.name || '',
+          elements: (test.elements || []).map((element) => ({
+            text: element.text,
+            source_document_name: element.source_document_name || '',
+            source_paragraph_ref: element.source_paragraph_ref || '',
+            source_extract_ref: element.source_extract_id
+              ? (authorityExtracts.find((extract) => extract.id === element.source_extract_id)?.paragraph_ref || 'stored extract')
+              : ''
+          }))
+        })),
+        documents: [
+          ...matterFiles.map((file) => ({ id: file.id, name: file.file_name, content: file.text || '' })),
+          ...uploadedDocuments.map((doc, idx) => ({
+            id: `upload-${idx + 1}`,
+            name: doc.name,
+            content: doc.content,
+            linked_to: Object.entries(linkedDocuments)
+              .filter(([, docs]) => docs.includes(idx))
+              .map(([point]) => point)
+          }))
+        ]
       });
 
       setGeneratedArgument({ full_argument_markdown: response.data.argument });
@@ -359,7 +419,9 @@ export default function ArgumentBuilder() {
     misstatements,
     procedural,
     caseLaw: mainAuthorities,
-    extracts: authorityExtracts
+    extracts: authorityExtracts,
+    legalTests,
+    gap: latestGap
   });
 
   const prospectsHistory = argumentVersions
@@ -554,6 +616,10 @@ export default function ArgumentBuilder() {
     } else if (type === 'clause') {
       document.getElementById('material-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       document.getElementById('clause-reference')?.focus();
+    } else if (type === 'test') {
+      document.getElementById('legal-tests')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (type === 'factlist') {
+      document.getElementById('gap-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
       document.getElementById('question-stage')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -618,6 +684,12 @@ export default function ArgumentBuilder() {
             <p className="text-xs text-blue-600 mt-2">Loading last saved version...</p>
           )}
         </div>
+
+        {selectedMatter && (
+          <div className="mb-6">
+            <ConfirmedTestsBanner tests={legalTests} />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Input Panel */}
@@ -920,9 +992,11 @@ export default function ArgumentBuilder() {
               )}
 
               {generatedArgument && generatedArgument.full_argument_markdown && (
-                <div className="prose prose-slate max-w-none bg-white p-6 rounded-lg border overflow-y-auto max-h-[700px]">
-                  <ReactMarkdown>{generatedArgument.full_argument_markdown}</ReactMarkdown>
-                </div>
+                <DraftBody
+                  text={generatedArgument.full_argument_markdown}
+                  documents={documentPool}
+                  className="prose prose-slate max-w-none bg-white p-6 rounded-lg border overflow-y-auto max-h-[700px]"
+                />
               )}
             </CardContent>
           </Card>
@@ -969,6 +1043,35 @@ export default function ArgumentBuilder() {
         </div>
 
         {selectedMatter && (
+          <div className="mt-6">
+            <LegalTestsPanel
+              matterId={selectedMatter}
+              tests={legalTests}
+              extracts={authorityExtracts}
+              caseLaw={mainAuthorities}
+              onRefresh={() => {
+                queryClient.invalidateQueries({ queryKey: ['legalTests', selectedMatter] });
+                queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });
+              }}
+            />
+          </div>
+        )}
+
+        {selectedMatter && (
+          <div className="mt-6">
+            <GapAnalysisPanel
+              matterId={selectedMatter}
+              matterName={currentMatter?.matter_name || ''}
+              court={currentMatter?.court || ''}
+              ourPoints={ourPoints}
+              tests={legalTests}
+              gap={latestGap}
+              onRefresh={() => queryClient.invalidateQueries({ queryKey: ['gapAnalyses', selectedMatter] })}
+            />
+          </div>
+        )}
+
+        {selectedMatter && (
           <>
             <div className="mt-6">
               <ProspectsPanel
@@ -989,13 +1092,23 @@ export default function ArgumentBuilder() {
         )}
 
         {generatedArgument && generatedArgument.full_argument_markdown && (
-          <div className="mt-6">
-            <ExtractCheckPanel
+          <div className="mt-6 space-y-6">
+            <AuthorityCheckPanel
               text={generatedArgument.full_argument_markdown}
               extracts={authorityExtracts.filter((extract) =>
                 mainAuthorityPool.some((record) => record.id === extract.case_law_id)
               )}
               mainAuthorities={mainAuthorityPool}
+            />
+            <DocumentCheckPanel
+              text={generatedArgument.full_argument_markdown}
+              documents={documentPool}
+              extracts={authorityExtracts}
+            />
+            <ExtractNeededPanel
+              text={generatedArgument.full_argument_markdown}
+              caseLaw={mainAuthorities}
+              onSaved={() => queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] })}
             />
           </div>
         )}

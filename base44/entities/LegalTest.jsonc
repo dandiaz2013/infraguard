@@ -1,0 +1,123 @@
+{
+  "name": "LegalTest",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter this legal test belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Name of the test relied on, e.g. the test under the rule or authority"
+    },
+    "source_case_law_id": {
+      "type": "string",
+      "description": "Case Law Library authority that sets out the test"
+    },
+    "source_extract_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Stored AuthorityExtract records that set out the test"
+    },
+    "elements": {
+      "type": "array",
+      "description": "Elements of the test, each tied to a stored extract or a document passage",
+      "items": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          },
+          "source_extract_id": {
+            "type": "string"
+          },
+          "user_confirmed": {
+            "type": "boolean",
+            "default": false
+          },
+          "source_document_name": {
+            "type": "string"
+          },
+          "source_paragraph_ref": {
+            "type": "string"
+          },
+          "source_quote": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "User notes on the test"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Proposed",
+        "Confirmed by user"
+      ],
+      "default": "Proposed",
+      "description": "Only Confirmed tests are used in the checklist and in drafting"
+    }
+  },
+  "required": [
+    "matter_id",
+    "name"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

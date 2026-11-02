@@ -10,6 +10,8 @@ const BUTTON_LABELS = {
   clause: 'Add contract clause',
   question: 'Answer a question',
   point: 'Add a point',
+  test: 'Confirm the test',
+  factlist: 'Open fact list',
 };
 
 const EFFORT_STYLE = {

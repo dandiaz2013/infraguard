@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import TriageTab from '@/components/matters/TriageTab';
 import CaseLawTab from '@/components/matters/CaseLawTab';
 import MainAuthorityPanel from '@/components/caselaw/MainAuthorityPanel';
+import GapAnalysisRunner from '@/components/argument/GapAnalysisRunner';
 
 export default function MatterDetail() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -105,12 +106,15 @@ export default function MatterDetail() {
               </div>
             </div>
 
-            <Link to={createPageUrl('CaseWorkflow') + '?matter=' + matter.id}>
-              <Button className="bg-slate-900 hover:bg-slate-800">
-                <ListChecks className="h-4 w-4 mr-2" />
-                Case Workflow
-              </Button>
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <GapAnalysisRunner matterId={matterId} matterName={matter.matter_name} />
+              <Link to={createPageUrl('CaseWorkflow') + '?matter=' + matter.id}>
+                <Button className="bg-slate-900 hover:bg-slate-800">
+                  <ListChecks className="h-4 w-4 mr-2" />
+                  Case Workflow
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
 
