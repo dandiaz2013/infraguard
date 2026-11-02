@@ -119,6 +119,9 @@ export default function LegalTestCard({ test, extracts = [], caseLaw = [], onRef
               </div>
             </div>
             <p className="text-[11px] text-slate-500">{sourceLabel(element)}</p>
+            {element.against_us && (
+              <p className="text-[11px] text-red-700">Counts against the applicant - address it in the argument.</p>
+            )}
             {element.source_quote && (
               <p className="text-[11px] text-slate-600 border-l-2 border-slate-200 pl-2">{element.source_quote}</p>
             )}
