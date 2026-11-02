@@ -5,7 +5,7 @@ export const PROPOSED_STATUS = 'Proposed - compare with the official text';
 export const LICENCE = 'Contains information licensed under the Open Justice Licence v1.0';
 
 export const SAFETY_FOOTER =
-  'Draft for review. Check every authority against the official judgment before filing. Not legal advice.';
+  'Draft for review. Check every authority and document reference against the originals before filing. Not legal advice.';
 
 export function isExtractChecked(extract, caseRecord) {
   if (!extract) return false;

@@ -22,16 +22,18 @@ export default function TestFromMainAuthority({
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [paste, setPaste] = useState('');
   const attempted = useRef('');
 
   const chosen = authorities.find((record) => record.id === selectedId) || authorities[0] || null;
+  const canFetch = Boolean(chosen && /^https?:\/\//i.test(String(chosen.official_url || chosen.url || '')));
   const stored = extracts
     .filter((extract) => extract.case_law_id === chosen?.id)
     .sort((a, b) => Number(String(a.paragraph_ref).match(/\d+/)?.[0] || 0) - Number(String(b.paragraph_ref).match(/\d+/)?.[0] || 0));
   const proposed = tests.filter((test) => test.source_case_law_id === chosen?.id);
   const background = tests.filter((test) => test.usage === 'Background: tests applied in the earlier decision');
 
-  const run = async () => {
+  const run = async (text = paste) => {
     if (!chosen?.id || busy) return;
     setBusy(true);
     setMessage('');
@@ -39,7 +41,7 @@ export default function TestFromMainAuthority({
       const response = await base44.functions.invoke('findAuthorityTest', {
         case_law_id: chosen.id,
         matter_id: matterId || '',
-        text: '',
+        text: text || '',
         points: points.slice(0, 40)
       });
       const data = response.data || {};
@@ -59,16 +61,26 @@ export default function TestFromMainAuthority({
 
   // Run once, automatically, on the main authority for this application.
   useEffect(() => {
-    if (!chosen?.id || stored.length > 0) return;
+    if (!chosen?.id || !canFetch || stored.length > 0) return;
     if (attempted.current === chosen.id) return;
     attempted.current = chosen.id;
-    run();
-  }, [chosen?.id, stored.length]);
+    run('');
+  }, [chosen?.id, canFetch, stored.length]);
 
   const tick = async (extract, checked) => {
     await base44.entities.AuthorityExtract.update(extract.id, {
       status: checked ? 'Extract checked against official text' : 'Proposed - compare with the official text',
       checked_date: new Date().toISOString()
+    });
+    if (onRefresh) onRefresh();
+  };
+
+  // Confirming the test for this application: it stays tied to the authority named here.
+  const confirm = async (test) => {
+    await base44.entities.LegalTest.update(test.id, {
+      status: 'Confirmed by user',
+      usage: 'Gateway application',
+      source_case_law_id: chosen?.id || test.source_case_law_id || ''
     });
     if (onRefresh) onRefresh();
   };
@@ -152,18 +164,53 @@ export default function TestFromMainAuthority({
         )}
 
         {!busy && stored.length > 0 && (
-          <Button size="sm" variant="outline" onClick={run}>
+          <Button size="sm" variant="outline" onClick={() => run('')}>
             Find the test again
           </Button>
         )}
 
+        {!canFetch && !busy && (
+          <div className="rounded border border-slate-200 bg-slate-50 p-2 space-y-2">
+            <p className="text-[11px] text-slate-700">
+              No official link is stored for this authority. Paste the judgment text here once, with its paragraph
+              numbers, and the proposed extracts will be stored for you to tick.
+            </p>
+            <textarea
+              value={paste}
+              onChange={(event) => setPaste(event.target.value)}
+              rows={4}
+              placeholder="Paste the judgment text, with its paragraph numbers"
+              className="w-full rounded-md border border-input bg-background p-2 text-xs"
+            />
+            <Button size="sm" variant="outline" onClick={() => run(paste)} disabled={paste.trim().length < 200}>
+              Read this text
+            </Button>
+          </div>
+        )}
+
         {proposed.length > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-2">
             <p className="text-[11px] font-medium text-slate-700">Proposed tests from this authority</p>
             {proposed.map((test) => (
-              <div key={test.id} className="text-xs text-slate-800">
-                <span className="font-medium">{test.name}</span>
-                <span className="text-slate-500"> — {(test.elements || []).map((element) => element.source_paragraph_ref || 'no paragraph').join(', ')}</span>
+              <div key={test.id} className="rounded border border-slate-200 p-2 space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-slate-900">{test.name}</span>
+                  {test.status === 'Confirmed by user' ? (
+                    <Badge variant="outline" className="bg-green-50 text-green-800 border-green-200">
+                      Confirmed
+                    </Badge>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => confirm(test)}>
+                      Confirm this test
+                    </Button>
+                  )}
+                </div>
+                {(test.elements || []).map((element, index) => (
+                  <p key={index} className="text-[11px] text-slate-700">
+                    {element.source_paragraph_ref ? `para ${element.source_paragraph_ref}` : 'paragraph not recorded'} — “
+                    {element.text}”
+                  </p>
+                ))}
               </div>
             ))}
           </div>

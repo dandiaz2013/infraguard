@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -173,19 +173,20 @@ export default function ArgumentBuilder() {
   });
 
   const latestGap = gapAnalyses[0] || null;
-  const mainAuthorityPool = useMemo(
-    () => dedupeAuthorities(caseLaw.filter((entry) => entry.is_main === true)).items,
-    [caseLaw]
-  );
+  const mainAuthorityPool = useMemo(() => dedupeAuthorities(caseLaw).items, [caseLaw]);
   // Default to a main authority that is not one of the judgments being challenged.
   const challengedNames = matterFiles
     .filter((file) => file.category === 'Judgments' || file.category === 'Orders')
     .map((file) => String(file.file_name || '').toLowerCase().replace(/\.[a-z0-9]+$/, ''));
+  const notChallenged = (record) => {
+    const name = String(record.name || '').toLowerCase();
+    return Boolean(name) && !challengedNames.some((file) => file.includes(name) || name.includes(file));
+  };
   const preferredAuthority =
-    mainAuthorityPool.find((record) => {
-      const name = String(record.name || '').toLowerCase();
-      return name && !challengedNames.some((file) => file.includes(name) || name.includes(file));
-    }) || null;
+    mainAuthorityPool.find((record) => record.is_main && notChallenged(record)) ||
+    mainAuthorityPool.find(notChallenged) ||
+    mainAuthorityPool[0] ||
+    null;
   const mainAuthorityId = procedural.main_authority_id || preferredAuthority?.id || mainAuthorityPool[0]?.id || '';
   const mainAuthority = mainAuthorityPool.find((record) => record.id === mainAuthorityId) || null;
 
@@ -524,7 +525,7 @@ export default function ArgumentBuilder() {
     record,
     checklistKey: checklistProspects.checklist.map((item) => `${item.id}:${item.result}`).join('|'),
     checklist: checklistProspects.checklist,
-    legalTests,
+    legalTests: confirmedTests,
     registerAnswers,
     undisputedFacts,
     generatedArgument,
@@ -1112,7 +1113,7 @@ export default function ArgumentBuilder() {
                   matterName={currentMatter?.matter_name || ''}
                   court={currentMatter?.court || ''}
                   ourPoints={ourPoints}
-                  tests={legalTests}
+                  tests={confirmedTests}
                   gap={latestGap}
                   record={record}
                   onRefresh={() => queryClient.invalidateQueries({ queryKey: ['gapAnalyses', selectedMatter] })}

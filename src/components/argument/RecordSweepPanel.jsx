@@ -5,9 +5,9 @@ import { CalendarClock, Gavel, History, Paperclip } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/recordIndex';
 
 const ROLE_ORDER = [
-  ['Court', 'Judge says'],
-  ['Other party', 'Other side says'],
-  ['Our side', 'Our statements say'],
+  ['Court', 'The court says'],
+  ['Other party', 'The other side says'],
+  ['Our side', 'Our documents say'],
   ['Unknown', 'Party not recorded'],
 ];
 
