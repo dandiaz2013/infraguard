@@ -23,101 +23,16 @@ export default function AICoach({
 
     setIsAnalyzing(true);
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a senior UK barrister coaching a junior colleague. Review this legal argument development and provide strategic guidance.
-
-## MATTER CONTEXT
-Court: ${currentMatter?.court || 'Not specified'}
-Position: ${position}
-Matter Type: ${currentMatter?.matter_type || 'N/A'}
-
-## FACT PATTERN
-${factPattern || 'No facts provided yet'}
-
-## GENERATED ARGUMENT
-${generatedArgument?.full_argument_markdown || 'No argument generated yet'}
-
-## AVAILABLE AUTHORITIES
-${authorities.length > 0 ? authorities.map(a => `- ${a.title} (${a.citation})`).join('\n') : 'None linked'}
-
-## YOUR COACHING TASK
-Provide Socratic guidance to strengthen this argument:
-
-1. **STRATEGIC QUESTIONS**: Ask 3-5 probing questions that make the lawyer think deeper about:
-   - Missing elements of the cause of action
-   - Weaknesses in reasoning
-   - Counter-arguments not addressed
-   - Evidential gaps
-
-2. **PRACTICE DIRECTION COMPLIANCE**: 
-   - Check compliance with ${currentMatter?.court || 'court'} practice directions
-   - Flag any procedural issues
-   - Suggest improvements
-
-3. **LEGAL WEAKNESSES**: Identify:
-   - Logical gaps in reasoning
-   - Missing legal steps
-   - Authority gaps (cases/statutes not cited but should be)
-   - Risk areas
-
-4. **STRENGTHS TO LEVERAGE**: What's working well that should be expanded?
-
-5. **IMMEDIATE IMPROVEMENTS**: 3-5 specific, actionable suggestions
-
-6. **COUNTER-ARGUMENTS**: What will the opponent say? How to pre-empt?
-
-Be constructive but challenging. Guide, don't tell. Ask questions that prompt better thinking.`,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            strategic_questions: {
-              type: "array",
-              items: { type: "string" }
-            },
-            practice_direction_check: {
-              type: "object",
-              properties: {
-                compliant: { type: "boolean" },
-                issues: { type: "array", items: { type: "string" } },
-                suggestions: { type: "array", items: { type: "string" } }
-              }
-            },
-            weaknesses: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  weakness: { type: "string" },
-                  impact: { type: "string", enum: ["Critical", "Moderate", "Minor"] },
-                  how_to_fix: { type: "string" }
-                }
-              }
-            },
-            strengths: {
-              type: "array",
-              items: { type: "string" }
-            },
-            immediate_improvements: {
-              type: "array",
-              items: { type: "string" }
-            },
-            opponent_counter_arguments: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  counter: { type: "string" },
-                  how_to_address: { type: "string" }
-                }
-              }
-            },
-            overall_assessment: { type: "string" }
-          }
-        }
+      const response = await base44.functions.invoke('argumentCoach', {
+        court: currentMatter?.court,
+        position,
+        matterType: currentMatter?.matter_type,
+        factPattern,
+        generatedArgument: generatedArgument?.full_argument_markdown,
+        authorities: authorities.map((a) => ({ title: a.title, citation: a.citation }))
       });
 
-      setFeedback(result);
+      setFeedback(response.data.feedback);
     } catch (error) {
       console.error('Coach analysis failed:', error);
       alert('Failed to get coaching feedback');

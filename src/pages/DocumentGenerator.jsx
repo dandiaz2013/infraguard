@@ -70,49 +70,26 @@ export default function DocumentGenerator() {
     setShowPreview(false);
 
     try {
-      const argumentContext = loadedArgument 
-        ? `\n\n## SAVED ARGUMENT (Version ${loadedArgument.version_number})\n**Title:** ${loadedArgument.argument_title}\n**Position:** ${loadedArgument.position}\n**Court:** ${loadedArgument.court}\n\n### Fact Pattern:\n${loadedArgument.fact_pattern}\n\n### Generated Argument:\n${loadedArgument.argument_text || ''}`
-        : '';
-
-      const authoritiesContext = authorities.length > 0 
-        ? `\n\nRelevant Legal Authorities:\n${authorities.map(a => 
-            `- ${a.title} (${a.citation})\n  Legal Principle: ${a.legal_principle}\n  Relevance: ${a.relevance}`
-          ).join('\n\n')}`
-        : '';
-
-      const documentPrompts = {
-        'Particulars of Claim': `Draft comprehensive Particulars of Claim following CPR rules for UK civil litigation. Include proper headings, numbered paragraphs, clear statement of facts, legal basis for claim, and prayer for relief.`,
-        'Defence': `Draft a robust Defence document following CPR rules. Include proper admissions, denials with reasons, counterclaim if applicable, and clear legal arguments.`,
-        'Witness Statement': `Draft a formal Witness Statement complying with CPR Part 32 and Practice Direction 32. Include proper heading, statement of truth, chronological narrative, and exhibits references.`,
-        'Skeleton Argument': `Draft a persuasive Skeleton Argument for court submission. Include concise statement of issues, legal propositions with authorities, and structured submissions.`,
-        'Appeal Grounds': `Draft comprehensive Grounds of Appeal. Include clear identification of errors, legal basis for appeal, and authorities supporting each ground.`,
-        'Case Summary': `Draft a detailed Case Summary covering factual background, legal issues, authorities, and case analysis.`,
-        'Legal Opinion': `Draft a formal Legal Opinion with clear structure: instructions, facts, issues, legal analysis, authorities, and advice.`
-      };
-
-      const prompt = `${documentPrompts[documentType] || 'Draft a professional legal document.'}
-
-Briefing Notes:
-${briefingNotes}
-${argumentContext}
-${authoritiesContext}
-
-Requirements:
-- Use formal UK legal language and formatting
-- Include proper citations in UK format
-- Structure with clear headings and numbered paragraphs
-- Be comprehensive and professionally drafted
-- Include statement of truth where appropriate
-- Format in markdown with proper hierarchy
-
-Generate the complete ${documentType}:`;
-
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt: prompt,
-        add_context_from_internet: false
+      const response = await base44.functions.invoke('legalDocumentDraft', {
+        documentType,
+        briefingNotes,
+        argument: loadedArgument ? {
+          version_number: loadedArgument.version_number,
+          argument_title: loadedArgument.argument_title,
+          position: loadedArgument.position,
+          court: loadedArgument.court,
+          fact_pattern: loadedArgument.fact_pattern,
+          argument_text: loadedArgument.argument_text
+        } : null,
+        authorities: authorities.map(a => ({
+          title: a.title,
+          citation: a.citation,
+          legal_principle: a.legal_principle,
+          relevance: a.relevance
+        }))
       });
 
-      setGeneratedContent(response);
+      setGeneratedContent(response.data.content);
       setShowPreview(true);
     } catch (error) {
       console.error('Generation error:', error);

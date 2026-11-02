@@ -143,23 +143,17 @@ export default function ArgumentBuilder() {
       const uploadedDocs = [];
       
       for (const file of files) {
-        const uploadResult = await base44.integrations.Core.UploadFile({ file });
-        
-        const extractResult = await base44.integrations.Core.ExtractDataFromUploadedFile({
-          file_url: uploadResult.file_url,
-          json_schema: {
-            type: "object",
-            properties: {
-              full_text: { type: "string" }
-            }
-          }
+        const uploadResult = await base44.integrations.Core.UploadPrivateFile({ file });
+
+        const extractResponse = await base44.functions.invoke('documentTextExtract', {
+          fileUri: uploadResult.file_uri
         });
 
-        if (extractResult.status === 'success' && extractResult.output?.full_text) {
+        if (extractResponse.data?.text) {
           uploadedDocs.push({
             name: file.name,
-            url: uploadResult.file_url,
-            content: extractResult.output.full_text
+            url: uploadResult.file_uri,
+            content: extractResponse.data.text
           });
         }
       }
@@ -214,100 +208,37 @@ export default function ArgumentBuilder() {
     setGeneratedArgument(null);
 
     try {
-      const authoritiesContext = authorities.length > 0
-        ? `\n\nRelevant Legal Authorities:\n${authorities.map(a => 
-            `- ${a.title} (${a.citation})\n  Principle: ${a.legal_principle}\n  Status: ${a.tags?.find(t => ['Active', 'Overruled'].includes(t)) || 'Active'}`
-          ).join('\n\n')}`
-        : '';
-
-      const issueContext = selectedIssue && issues.length > 0
-        ? `\n\nLegal Issue: ${issues.find(i => i.id === selectedIssue)?.issue_title || ''}`
-        : '';
-
-      const expandedFacts = `
-${chronology ? `\n### Chronology (Key Events):\n${chronology}` : ''}
-${disputedFacts ? `\n### Disputed Facts:\n${disputedFacts}` : ''}
-${undisputedFacts ? `\n### Undisputed Facts:\n${undisputedFacts}` : ''}
-${legalIssuesRaised ? `\n### Legal Issues Raised:\n${legalIssuesRaised}` : ''}
-${proceduralHistory ? `\n### Procedural History:\n${proceduralHistory}` : ''}
-${lossHarmRisk ? `\n### Loss, Harm, or Risk:\n${lossHarmRisk}` : ''}
-      `.trim();
-
-      const documentsContext = uploadedDocuments.length > 0
-        ? `\n\n## Uploaded Documents\n${uploadedDocuments.map((doc, idx) => {
-            const linkedTo = Object.entries(linkedDocuments)
-              .filter(([_, docs]) => docs.includes(idx))
-              .map(([point]) => point);
-            return `### Document ${idx + 1}: ${doc.name}${linkedTo.length > 0 ? ` (Linked to: ${linkedTo.join(', ')})` : ''}\n${doc.content.substring(0, 3000)}`;
-          }).join('\n\n')}`
-        : '';
-
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are JurisAI, a UK legal reasoning assistant. Draft a structured court-ready legal argument for ${position}.
-
-## CRITICAL: COURT & JURISDICTION LOCKED
-**Court:** ${currentMatter.court}
-**Matter Type:** ${currentMatter?.matter_type || 'N/A'}
-**Matter:** ${currentMatter?.matter_name || ''}
-
-YOU MUST:
-- Address ONLY ${currentMatter.court} - DO NOT change court level
-- Apply practice directions for ${currentMatter.court}
-- Use authorities binding on ${currentMatter.court}
-- Use procedural language appropriate to ${currentMatter.court}
-
-## Core Fact Pattern (Auto-Populated from Matter)
-${factPattern}
-
-${expandedFacts ? `## Fact Pattern Expansion (User-Provided Detail)\n${expandedFacts}` : ''}
-${issueContext}
-${authoritiesContext}
-${documentsContext}
-
-## Instructions to AI
-When generating arguments:
-- Treat auto-populated Matter facts as accurate unless contradicted
-- Prioritise user-added expansions
-- Identify legally material facts
-- Reference uploaded documents as evidence where relevant
-- Cross-reference document evidence with legal points
-- Ignore emotional language unless legally relevant
-- Structure arguments clearly with headings and sub-points
-- Where appropriate, flag factual gaps or evidential weaknesses
-
-## Output Requirements
-Generate a professional, court-ready legal argument with:
-
-1. **STATEMENT OF ISSUES**
-   - Clear identification of legal questions
-
-2. **LEGAL FRAMEWORK**
-   - Relevant statutes and legal principles
-   - Applicable tests and standards
-
-3. **FACTUAL MATRIX**
-   - Key material facts
-   - Timeline if relevant
-
-4. **DETAILED ARGUMENT**
-   - Step-by-step legal analysis
-   - Application of authorities to facts
-   - Proper UK citation format
-   - Address each element/requirement
-
-5. **COUNTER-ARGUMENTS & REBUTTAL**
-   - Anticipate opposing arguments
-   - Provide clear rebuttals
-
-6. **CONCLUSION & RELIEF SOUGHT**
-   - Summary of argument
-   - Remedies requested
-
-Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.`,
-        add_context_from_internet: true
+      const response = await base44.functions.invoke('legalArgumentDraft', {
+        position,
+        court: currentMatter.court,
+        matterName: currentMatter.matter_name,
+        matterType: currentMatter.matter_type,
+        factPattern,
+        issueTitle: selectedIssue ? (issues.find(i => i.id === selectedIssue)?.issue_title || '') : '',
+        expansions: {
+          chronology,
+          disputed_facts: disputedFacts,
+          undisputed_facts: undisputedFacts,
+          legal_issues_raised: legalIssuesRaised,
+          procedural_history: proceduralHistory,
+          loss_harm_risk: lossHarmRisk
+        },
+        authorities: authorities.map(a => ({
+          title: a.title,
+          citation: a.citation,
+          legal_principle: a.legal_principle,
+          status: a.tags?.find(t => ['Active', 'Overruled'].includes(t)) || 'Active'
+        })),
+        documents: uploadedDocuments.map((doc, idx) => ({
+          name: doc.name,
+          content: doc.content,
+          linked_to: Object.entries(linkedDocuments)
+            .filter(([, docs]) => docs.includes(idx))
+            .map(([point]) => point)
+        }))
       });
 
-      setGeneratedArgument({ full_argument_markdown: result });
+      setGeneratedArgument({ full_argument_markdown: response.data.argument });
     } catch (error) {
       console.error('Generation error:', error);
       alert(`Argument generation failed: ${error.message}`);
@@ -324,27 +255,12 @@ Use formal UK legal language. Cite all authorities properly. Be thorough and per
 
     setIsCorrectingFacts(true);
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a UK legal fact-checker. Review the following legal argument and identify any factual inaccuracies, unsupported claims, or errors in legal reasoning.
-
-## Generated Argument
-${generatedArgument.full_argument_markdown}
-
-## Original Facts
-${factPattern}
-
-## Task
-1. Identify any factual errors or unsupported claims
-2. Check if legal principles are correctly stated
-3. Verify case citations if any
-4. Flag any logical inconsistencies
-5. Provide corrected version if errors found
-
-Return the corrected argument with all factual errors fixed. If no errors, return the original argument with a note that it's accurate.`,
-        add_context_from_internet: true
+      const response = await base44.functions.invoke('legalArgumentFactCheck', {
+        argument: generatedArgument.full_argument_markdown,
+        factPattern
       });
 
-      setGeneratedArgument({ full_argument_markdown: result });
+      setGeneratedArgument({ full_argument_markdown: response.data.argument });
       alert('Facts reviewed and corrected');
     } catch (error) {
       console.error('Correction error:', error);
