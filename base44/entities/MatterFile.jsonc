@@ -1,0 +1,98 @@
+{
+  "name": "MatterFile",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter this document belongs to"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "Original file name"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Case summary and pleadings",
+        "Our witness statement",
+        "Other party witness statement",
+        "N244 and continuation sheet",
+        "Previous judgments and orders",
+        "Other document"
+      ],
+      "description": "Which workflow upload slot the document belongs to"
+    },
+    "file_uri": {
+      "type": "string",
+      "description": "Private storage URI for the uploaded file"
+    },
+    "text": {
+      "type": "string",
+      "description": "Extracted document text used by the workflow"
+    },
+    "char_count": {
+      "type": "number",
+      "description": "Length of the extracted text before any truncation"
+    },
+    "truncated": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the stored text was truncated"
+    }
+  },
+  "required": [
+    "matter_id",
+    "file_name",
+    "category"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

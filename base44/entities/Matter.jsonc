@@ -96,6 +96,15 @@
       "type": "string",
       "format": "date-time",
       "description": "When the score was last calculated"
+    },
+    "simple_arguments": {
+      "type": "object",
+      "description": "Workflow step 2 output: issues and simple arguments for each side, each tied to a document and paragraph"
+    },
+    "simple_arguments_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the simple arguments were last generated"
     }
   },
   "required": [
