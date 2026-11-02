@@ -7,6 +7,9 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import CaseLawLibrary from './pages/CaseLawLibrary';
+import CaseLawDetail from './pages/CaseLawDetail';
+import Judgments from './pages/Judgments';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -58,6 +61,21 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
+      <Route path="/CaseLawLibrary" element={
+        <LayoutWrapper currentPageName="CaseLawLibrary">
+          <CaseLawLibrary />
+        </LayoutWrapper>
+      } />
+      <Route path="/CaseLawDetail" element={
+        <LayoutWrapper currentPageName="CaseLawLibrary">
+          <CaseLawDetail />
+        </LayoutWrapper>
+      } />
+      <Route path="/Judgments" element={
+        <LayoutWrapper currentPageName="Judgments">
+          <Judgments />
+        </LayoutWrapper>
+      } />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

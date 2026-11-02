@@ -10,6 +10,7 @@ import {
   TrendingUp, Clock, AlertCircle, CheckCircle2 
 } from 'lucide-react';
 import { format } from 'date-fns';
+import CaseLawDashboardCards from '@/components/dashboard/CaseLawDashboardCards';
 
 export default function Dashboard() {
   const { data: matters = [] } = useQuery({
@@ -155,6 +156,8 @@ export default function Dashboard() {
             <span>Authority Verification</span>
           </Button>
         </div>
+
+        <CaseLawDashboardCards />
 
         {/* Recent Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

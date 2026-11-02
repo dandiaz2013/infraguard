@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, Sparkles, BookOpen, Scale, ExternalLink, Plus, Loader2 } from 'lucide-react';
+import { Search, Sparkles, BookOpen, Scale, ExternalLink, Plus, Loader2, AlertTriangle, BookMarked } from 'lucide-react';
 
 export default function Research() {
   const [researchQuery, setResearchQuery] = useState('');
@@ -34,6 +34,13 @@ export default function Research() {
     mutationFn: (data) => base44.entities.LegalAuthority.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries(['authorities']);
+    }
+  });
+
+  const createCaseLawMutation = useMutation({
+    mutationFn: (data) => base44.entities.CaseLaw.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['caseLaw']);
     }
   });
 
@@ -112,6 +119,27 @@ export default function Research() {
     };
 
     createAuthorityMutation.mutate(authorityData);
+  };
+
+  const handleSaveToCaseLaw = (authority) => {
+    const year = Number(authority.year);
+    createCaseLawMutation.mutate(
+      {
+        name: authority.title,
+        neutral_citation: authority.citation || '',
+        court: authority.court || '',
+        year: Number.isFinite(year) ? year : undefined,
+        url: authority.url || '',
+        summary: authority.relevance || '',
+        principles: authority.legal_principle ? [authority.legal_principle] : [],
+        source_note: 'AI-suggested by legal research. Not yet verified.',
+        verified: false
+      },
+      {
+        onSuccess: () =>
+          alert('Saved to the Case Law Library as unverified. Check it against a primary source.')
+      }
+    );
   };
 
   return (
@@ -254,6 +282,14 @@ export default function Research() {
               </Card>
             )}
 
+            {/* AI safety banner */}
+            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4">
+              <AlertTriangle className="h-5 w-5 text-amber-700 mt-0.5 flex-shrink-0" />
+              <p className="text-sm font-medium text-amber-900">
+                AI-suggested, verify against a primary source before use
+              </p>
+            </div>
+
             {/* Authorities */}
             <div>
               <h2 className="text-2xl font-semibold text-slate-900 mb-4">
@@ -303,6 +339,15 @@ export default function Research() {
                           >
                             <Plus className="h-4 w-4 mr-1" />
                             Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="whitespace-normal h-auto py-2 text-xs leading-tight"
+                            onClick={() => handleSaveToCaseLaw(authority)}
+                          >
+                            <BookMarked className="h-4 w-4 mr-1 flex-shrink-0" />
+                            Save to Case Law Library
                           </Button>
                           {authority.url && (
                             <Button

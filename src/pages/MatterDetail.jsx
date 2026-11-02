@@ -9,13 +9,16 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, Scale, FileText, BookOpen, MessageSquare, 
-  Plus, ExternalLink, Calendar, Building2 
+  Plus, ExternalLink, Calendar, Building2, Calculator, Gavel 
 } from 'lucide-react';
 import { format } from 'date-fns';
+import TriageTab from '@/components/matters/TriageTab';
+import CaseLawTab from '@/components/matters/CaseLawTab';
 
 export default function MatterDetail() {
   const urlParams = new URLSearchParams(window.location.search);
   const matterId = urlParams.get('id');
+  const queryClient = useQueryClient();
 
   const { data: matter, isLoading } = useQuery({
     queryKey: ['matter', matterId],
@@ -160,6 +163,14 @@ export default function MatterDetail() {
             <TabsTrigger value="documents">
               <FileText className="h-4 w-4 mr-2" />
               Documents ({documents.length})
+            </TabsTrigger>
+            <TabsTrigger value="triage">
+              <Calculator className="h-4 w-4 mr-2" />
+              Triage
+            </TabsTrigger>
+            <TabsTrigger value="caselaw">
+              <Gavel className="h-4 w-4 mr-2" />
+              Case Law
             </TabsTrigger>
           </TabsList>
 
@@ -312,6 +323,17 @@ export default function MatterDetail() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="triage">
+            <TriageTab
+              matter={matter}
+              onSaved={() => queryClient.invalidateQueries({ queryKey: ['matter', matterId] })}
+            />
+          </TabsContent>
+
+          <TabsContent value="caselaw">
+            <CaseLawTab matter={matter} />
           </TabsContent>
         </Tabs>
       </div>

@@ -114,7 +114,7 @@ export default function CaseLawDetail() {
             {record.verified !== true && (
               <Button
                 variant="outline"
-                onClick={() => saveMutation({ ...record, verified: true })}
+                onClick={() => saveMutation({ verified: true })}
               >
                 <ShieldCheck className="h-4 w-4 mr-2" />
                 Mark verified
