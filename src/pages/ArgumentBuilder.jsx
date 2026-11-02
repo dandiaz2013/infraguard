@@ -547,6 +547,18 @@ export default function ArgumentBuilder() {
     .sort((a, b) => (a.version_number || 0) - (b.version_number || 0))
     .map((entry) => ({ version: entry.version_number, rating: entry.prospects.rating }));
 
+  // Corrects the wording of a quotation in the draft itself, then re-runs the check.
+  const handleEditDraftQuote = (find, replace) => {
+    const current = generatedArgument?.full_argument_markdown || '';
+    if (!current.includes(find)) {
+      alert('The draft no longer contains that wording. Generate the draft again and check.');
+      return;
+    }
+    const next = current.replace(find, replace);
+    setGeneratedArgument({ ...generatedArgument, full_argument_markdown: next });
+    setDraftChanges(compareNewDraft(next));
+  };
+
   const updateQuestion = (index, patch) =>
     setQuestions((prev) => prev.map((question, position) => (position === index ? { ...question, ...patch } : question)));
 
@@ -1091,8 +1103,20 @@ export default function ArgumentBuilder() {
                   <>
                     <AuthorityCheckPanel
                       text={generatedArgument.full_argument_markdown}
-                      extracts={extracted}
-                      mainAuthorities={mainAuthority ? [mainAuthority] : mainAuthorityPool}
+                      matterId={selectedMatter}
+                      extracts={authorityExtracts}
+                      caseLaw={mainAuthorityPool}
+                      mainAuthorities={
+                        mainAuthorityPool.some((record) => record.is_main)
+                          ? mainAuthorityPool.filter((record) => record.is_main)
+                          : mainAuthority
+                            ? [mainAuthority]
+                            : []
+                      }
+                      mainAuthorityId={mainAuthorityId}
+                      documents={documentPool}
+                      onRefresh={() => queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] })}
+                      onEditDraft={handleEditDraftQuote}
                     />
                     <DocumentCheckPanel
                       text={generatedArgument.full_argument_markdown}

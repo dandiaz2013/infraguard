@@ -1,0 +1,103 @@
+{
+  "name": "QuoteDecision",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter the decision was made for"
+    },
+    "quote_key": {
+      "type": "string",
+      "description": "Normalised wording of the quotation the decision is about"
+    },
+    "quote_text": {
+      "type": "string",
+      "description": "The quotation as it appears in the draft"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "record",
+        "ignore",
+        "edit",
+        "extract"
+      ],
+      "description": "record = from the record and checked in section B; ignore = not a quote; edit = the wording was corrected; extract = the stored extract was added"
+    },
+    "document_name": {
+      "type": "string",
+      "description": "Case file document the wording was linked to"
+    },
+    "paragraph_ref": {
+      "type": "string",
+      "description": "Paragraph of the case file document the wording was linked to"
+    },
+    "edited_text": {
+      "type": "string",
+      "description": "The corrected wording of the quotation"
+    },
+    "case_law_id": {
+      "type": "string",
+      "description": "Authority the extract was added to"
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional note recorded with the decision"
+    }
+  },
+  "required": [
+    "matter_id",
+    "quote_key",
+    "decision"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

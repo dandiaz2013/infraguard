@@ -4,7 +4,7 @@ import { clip } from '@/lib/recordIndex';
 
 export const USER_STATEMENT_MARK = '[USER STATEMENT - NO DOCUMENT REFERENCE]';
 const CONFLICT_MARK = /\[CONFLICT:[^\]]*\]/g;
-const OPEN_MARKER = /\[(?:FACT NEEDED|EXTRACT NEEDED|RULE TEXT NEEDED|DOCUMENT REFERENCE NEEDED|AUTHORITY NEEDED)[^\]]*\]/gi;
+const OPEN_MARKER = /\[(?:(?:NO )?EXTRACT NEEDED|NO EXTRACT|FACT NEEDED|RULE TEXT NEEDED|DOCUMENT REFERENCE NEEDED|AUTHORITY NEEDED)[^\]]*\]/gi;
 
 export function compareDraft(text, items = []) {
   const norm = normalise(text || '');

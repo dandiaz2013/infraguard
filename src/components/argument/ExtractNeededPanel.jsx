@@ -6,7 +6,7 @@ import ExtractPasteBox from '@/components/argument/ExtractPasteBox';
 import { searchRecord } from '@/lib/recordFirst';
 import { ROLE_LABELS } from '@/lib/recordIndex';
 
-const MARKER = /\[EXTRACT NEEDED:([^\]]+)\]/gi;
+const MARKER = /\[(?:NO EXTRACT|EXTRACT NEEDED):?([^\]]+)\]/gi;
 
 export default function ExtractNeededPanel({ text, caseLaw = [], record, onSaved }) {
   const markers = useMemo(() => {
@@ -31,7 +31,7 @@ export default function ExtractNeededPanel({ text, caseLaw = [], record, onSaved
   if (markers.length === 0) return null;
 
   return (
-    <Card className="shadow-sm border-amber-300">
+    <Card className="shadow-sm border-amber-300" id="extracts-needed">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <ClipboardPaste className="h-4 w-4 text-amber-700" />
@@ -50,7 +50,7 @@ export default function ExtractNeededPanel({ text, caseLaw = [], record, onSaved
           return (
             <div key={marker.body} className="space-y-2">
               <p className="text-sm text-amber-900">
-                EXTRACT NEEDED: {marker.caseName ? `${marker.caseName}` : 'authority'}
+                NO EXTRACT: {marker.caseName ? `${marker.caseName}` : 'authority'}
                 {marker.proposition ? ` — ${marker.proposition}` : ''}
               </p>
               {inRecord && (

@@ -77,6 +77,39 @@ function numberedBlocks(text) {
   return blocks;
 }
 
+// Built once per document pool so a whole draft can be matched against the record.
+export function buildRecordBlocks(documents = []) {
+  return (documents || [])
+    .map((doc) => ({
+      id: doc.id || '',
+      name: doc.name || doc.file_name || 'document',
+      flat: normalise(doc.text),
+      blocks: numberedBlocks(doc.text)
+        .map((block) => ({ number: block.number, text: block.lines.join(' ').trim() }))
+        .filter((block) => block.text),
+    }))
+    .filter((doc) => doc.flat);
+}
+
+export function matchRecordBlocks(quote, blocks = []) {
+  const norm = normalise(quote);
+  if (!norm || norm.length < 12) return null;
+  for (const doc of blocks || []) {
+    const hit = doc.blocks.find((block) => normalise(block.text).includes(norm));
+    if (hit) {
+      return { document_id: doc.id, document_name: doc.name, reference: `para ${hit.number}`, text: hit.text };
+    }
+    if (doc.flat.includes(norm)) {
+      return { document_id: doc.id, document_name: doc.name, reference: 'in the extracted text', text: '' };
+    }
+  }
+  return null;
+}
+
+export function findRecordMatch(quote, documents = []) {
+  return matchRecordBlocks(quote, buildRecordBlocks(documents));
+}
+
 export function findParagraph(text, number) {
   const blocks = numberedBlocks(text).filter((block) => block.number === Number(number));
   const texts = blocks.map((block) => block.lines.join(' ').trim()).filter(Boolean);
@@ -265,13 +298,7 @@ function similarity(left, right) {
 }
 
 export function checkDocumentQuotes(text, documents = [], extracts = []) {
-  const docBlocks = (documents || []).map((doc) => ({
-    name: doc.name,
-    blocks: numberedBlocks(doc.text)
-      .map((block) => ({ number: block.number, text: block.lines.join(' ').trim() }))
-      .filter((block) => block.text),
-    flat: normalise(doc.text),
-  }));
+  const docBlocks = buildRecordBlocks(documents);
 
   return findQuotations(text).map((quote) => {
     const norm = normalise(quote);
@@ -280,14 +307,15 @@ export function checkDocumentQuotes(text, documents = [], extracts = []) {
       return { quote, status: 'authority', document_name: '', reference: '', text: '' };
     }
 
-    for (const doc of docBlocks) {
-      const hit = doc.blocks.find((block) => normalise(block.text).includes(norm));
-      if (hit) {
-        return { quote, status: 'match', document_name: doc.name, reference: `para ${hit.number}`, text: hit.text };
-      }
-      if (norm.length > 20 && doc.flat.includes(norm)) {
-        return { quote, status: 'match', document_name: doc.name, reference: 'in the extracted text', text: '' };
-      }
+    const inRecord = matchRecordBlocks(quote, docBlocks);
+    if (inRecord) {
+      return {
+        quote,
+        status: 'match',
+        document_name: inRecord.document_name,
+        reference: inRecord.reference,
+        text: inRecord.text,
+      };
     }
 
     let best = null;

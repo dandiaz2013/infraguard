@@ -152,8 +152,9 @@ When generating arguments:
 - Use OUR POINTS as the spine of the argument, and mark any point with no document reference as [USER STATEMENT - NO DOCUMENT REFERENCE]
 - Where a contract clause is relied on, quote it from CONTRACT CLAUSES AND RULES RELIED ON; if the clause text is missing write [RULE TEXT NEEDED]
 - Where a fact is needed but not in the material, write [FACT NEEDED: describe what is needed] instead of inventing it
-- Where the draft needs a proposition from a main authority and no stored extract supports it, write [EXTRACT NEEDED: <case name>, <proposition>] and never state that proposition as law
-- When you rely on a main authority already in the library, quote its stored extract and state the proposition recorded with that extract
+- Every principle you state from a case must carry the stored extract word for word with its paragraph number, written as <case name>, para <number>: "<exact stored wording>". Never state a principle from a case without them
+- Where no stored extract supports a principle, state the principle in your own words, then write [NO EXTRACT: <case name>, <proposition>], and never present any wording as a quotation from that case
+- When you rely on a main authority already in the library, quote its stored extract word for word and state the proposition recorded with that extract
 - Refer to OUR documents ONLY in this structured form: {{DOC:<document id>|para:<number>}} or {{DOC:<document id>|page:<number>|lines:<a-b>}}, using a document id from the document list. Never describe a document reference in any other way, and never invent a document id, page, line or paragraph number
 - Organise the DETAILED ARGUMENT element by element under each confirmed legal test: a heading for the test, then a sub-heading for each element ("Element 1", "Element 2"), with the evidence for that element, its document references, and the conclusion on it. If the evidence for an element is missing write [FACT NEEDED: describe what is needed]
 - Never restate a legal test from memory: use the elements exactly as they are given
