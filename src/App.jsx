@@ -10,6 +10,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CaseLawLibrary from './pages/CaseLawLibrary';
 import CaseLawDetail from './pages/CaseLawDetail';
 import Judgments from './pages/Judgments';
+import CaseWorkflow from './pages/CaseWorkflow';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -74,6 +75,11 @@ const AuthenticatedApp = () => {
       <Route path="/Judgments" element={
         <LayoutWrapper currentPageName="Judgments">
           <Judgments />
+        </LayoutWrapper>
+      } />
+      <Route path="/CaseWorkflow" element={
+        <LayoutWrapper currentPageName="CaseWorkflow">
+          <CaseWorkflow />
         </LayoutWrapper>
       } />
       <Route path="*" element={<PageNotFound />} />

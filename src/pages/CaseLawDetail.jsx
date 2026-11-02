@@ -150,7 +150,18 @@ export default function CaseLawDetail() {
             <CardTitle className="text-base">Principles</CardTitle>
           </CardHeader>
           <CardContent>
-            {record.principles && record.principles.length > 0 ? (
+            {record.principle_refs && record.principle_refs.length > 0 ? (
+              <ul className="space-y-2 text-slate-700">
+                {record.principle_refs.map((ref, index) => (
+                  <li key={index}>
+                    <span className="font-mono text-xs text-slate-500 mr-2">
+                      {ref.paragraph_ref || 'no paragraph'}
+                    </span>
+                    {ref.principle}
+                  </li>
+                ))}
+              </ul>
+            ) : record.principles && record.principles.length > 0 ? (
               <ul className="list-disc pl-5 space-y-1 text-slate-700">
                 {record.principles.map((principle, index) => (
                   <li key={index}>{principle}</li>

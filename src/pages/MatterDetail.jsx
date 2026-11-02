@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, Scale, FileText, BookOpen, MessageSquare, 
-  Plus, ExternalLink, Calendar, Building2, Calculator, Gavel 
+  Plus, ExternalLink, Calendar, Building2, Calculator, Gavel, ListChecks 
 } from 'lucide-react';
 import { format } from 'date-fns';
 import TriageTab from '@/components/matters/TriageTab';
@@ -103,6 +103,13 @@ export default function MatterDetail() {
                 <Badge variant="outline">{matter.matter_type}</Badge>
               </div>
             </div>
+
+            <Link to={createPageUrl('CaseWorkflow') + '?matter=' + matter.id}>
+              <Button className="bg-slate-900 hover:bg-slate-800">
+                <ListChecks className="h-4 w-4 mr-2" />
+                Case Workflow
+              </Button>
+            </Link>
           </div>
         </div>
 
