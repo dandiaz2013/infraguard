@@ -7,12 +7,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { FileText, Loader2, Download, Eye } from 'lucide-react';
+import { FileText, Loader2, Download, Eye, FolderOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { Link } from 'react-router-dom';
 import ExtractCheckPanel from '@/components/authorities/ExtractCheckPanel';
 import RecordSweepPanel from '@/components/argument/RecordSweepPanel';
+import SourceMaterialPanel from '@/components/documents/SourceMaterialPanel';
+import DraftCitationCheck from '@/components/documents/DraftCitationCheck';
+import DraftList from '@/components/documents/DraftList';
 import { buildRecord } from '@/lib/recordIndex';
 import { buildSweeps } from '@/lib/recordFirst';
+import { defaultSourceSelection, toRecordDoc, verifyDraftCitations } from '@/lib/caseFile';
 
 export default function DocumentGenerator() {
   const [selectedMatter, setSelectedMatter] = useState('');
@@ -47,32 +52,54 @@ export default function DocumentGenerator() {
     queryFn: () => base44.entities.AuthorityExtract.list('-added_date'),
   });
 
-  const { data: matterFiles = [] } = useQuery({
-    queryKey: ['matterFiles', selectedMatter],
+  // The record is read from the Case File Library only. Generated drafts never are.
+  const { data: caseFileDocs = [] } = useQuery({
+    queryKey: ['caseFileDocuments', selectedMatter],
     queryFn: async () => {
-      const page = await base44.entities.MatterFile.filter({ matter_id: selectedMatter }, { limit: 30 });
+      const page = await base44.entities.CaseFileDocument.filter(
+        { matter_id: selectedMatter },
+        { sort: '-created_date', limit: 100 }
+      );
       return page.items || [];
     },
     enabled: !!selectedMatter
   });
+
+  const [ticked, setTicked] = useState({});
+  const [tickedFor, setTickedFor] = useState('');
+
+  React.useEffect(() => {
+    if (!selectedMatter || selectedMatter === tickedFor || caseFileDocs.length === 0) return;
+    const next = {};
+    defaultSourceSelection(caseFileDocs).forEach((row) => {
+      next[row.id] = row.reason;
+    });
+    setTicked(next);
+    setTickedFor(selectedMatter);
+  }, [caseFileDocs, selectedMatter, tickedFor]);
+
+  const toggleSource = (id) => {
+    setTicked((previous) => {
+      const next = { ...previous };
+      if (next[id]) delete next[id];
+      else next[id] = 'Chosen by you';
+      return next;
+    });
+  };
 
   const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
 
   const record = React.useMemo(
     () =>
       buildRecord(
-        matterFiles.map((file) => ({
-          id: file.id,
-          name: file.file_name,
-          text: file.text || '',
-          category: file.category,
-          record_status: file.record_status,
-          filed_by: file.filed_by,
-          filed_date: file.filed_date,
-          exhibit_of: file.exhibit_of
-        }))
+        caseFileDocs.filter((document) => ticked[document.id]).map(toRecordDoc)
       ),
-    [matterFiles]
+    [caseFileDocs, ticked]
+  );
+
+  const citations = React.useMemo(
+    () => verifyDraftCitations(generatedContent, record),
+    [generatedContent, record]
   );
 
   const sweeps = React.useMemo(() => buildSweeps(record, []), [record]);
@@ -143,6 +170,15 @@ export default function DocumentGenerator() {
           ref: row.ref,
           quote: row.quote
         })),
+        source_material: caseFileDocs
+          .filter((document) => ticked[document.id])
+          .map((document) => ({
+            name: document.file_name,
+            category: document.category,
+            party: document.party || '',
+            date: document.document_date || '',
+            reason: ticked[document.id]
+          })),
         main_authorities: mainAuthorityPool.map((record) => ({
           name: record.name,
           citation: record.neutral_citation || '',
@@ -189,9 +225,18 @@ export default function DocumentGenerator() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Document Generator</h1>
-          <p className="text-slate-600">Generate professional UK legal documents with AI assistance</p>
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">Document Generator</h1>
+            <p className="text-slate-600">Generate professional UK legal documents with AI assistance</p>
+          </div>
+          <Link
+            to="/CaseFileLibrary"
+            className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 hover:underline"
+          >
+            <FolderOpen className="h-4 w-4" />
+            Open Case File Library
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -333,8 +378,16 @@ export default function DocumentGenerator() {
           </Card>
         </div>
 
+        {selectedMatter && (
+          <div className="mt-6 space-y-6">
+            <SourceMaterialPanel documents={caseFileDocs} ticked={ticked} onToggle={toggleSource} />
+            <DraftList matterId={selectedMatter} />
+          </div>
+        )}
+
         {generatedContent && (
-          <div className="mt-6">
+          <div className="mt-6 space-y-6">
+            <DraftCitationCheck rows={citations} />
             <ExtractCheckPanel
               text={generatedContent}
               extracts={authorityExtracts.filter((extract) =>
@@ -356,9 +409,9 @@ export default function DocumentGenerator() {
               </CardHeader>
               <CardContent className="space-y-2">
                 <p className="text-xs text-slate-500">
-                  {record.documents.length} filed or served document
-                  {record.documents.length === 1 ? '' : 's'} indexed. A statement by the other side is labelled as stated
-                  by that party, never as established fact.
+                  {record.documents.length} case file document
+                  {record.documents.length === 1 ? '' : 's'} chosen for this draft. A statement by the other side is
+                  labelled as stated by that party, never as established fact.
                 </p>
                 <RecordSweepPanel sweeps={sweeps} />
               </CardContent>

@@ -1,16 +1,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
+import { caseFileDocuments } from '../../shared/caseFile.ts';
 
 const MAX_DOCUMENTS = 20;
 const MAX_DOC_CHARS = 14000;
 const MAX_TOTAL_CHARS = 60000;
 
 const CATEGORY_ORDER = [
-  'Case summary and pleadings',
-  'Our witness statement',
-  'Other party witness statement',
-  'N244 and continuation sheet',
-  'Previous judgments and orders',
-  'Other document',
+  'Application notices',
+  'Judgments',
+  'Orders',
+  'Witness statements',
+  'Skeleton arguments',
+  'Transcripts',
+  'Exhibits',
+  'Correspondence',
+  'Contracts',
+  'Other',
 ];
 
 const SCHEMA = {
@@ -95,7 +100,7 @@ export default async function (req) {
     );
     if (!matter) return Response.json({ error: 'Matter not found' }, { status: 404 });
 
-    const files = await base44.entities.MatterFile.filter({ matter_id: matterId });
+    const files = await caseFileDocuments(base44, matterId);
     const readable = orderFiles(
       files.filter((file) => typeof file.text === 'string' && file.text.trim())
     ).slice(0, MAX_DOCUMENTS);

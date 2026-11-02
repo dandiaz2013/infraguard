@@ -6,6 +6,7 @@ import {
   buildMisstatements,
   buildExtracts,
 } from '../../shared/argumentContext.ts';
+import { caseFileDocuments } from '../../shared/caseFile.ts';
 
 const ASSESSMENT_SCHEMA = {
   type: 'object',
@@ -70,8 +71,7 @@ export default async function (req) {
     const matter = await base44.entities.Matter.get(matterId).catch((e) => (e.status === 404 ? null : Promise.reject(e)));
     if (!matter) return Response.json({ error: 'Matter not found' }, { status: 404 });
 
-    const filePage = await base44.entities.MatterFile.filter({ matter_id: matterId }, { sort: '-created_date', limit: 20 });
-    const files = filePage.items || [];
+    const files = await caseFileDocuments(base44, matterId, { sort: '-created_date', limit: 20 });
     const { corpus, count } = buildEvidenceCorpus(files);
 
     const extractPage = await base44.entities.AuthorityExtract.list({ sort: '-added_date', limit: 60 });

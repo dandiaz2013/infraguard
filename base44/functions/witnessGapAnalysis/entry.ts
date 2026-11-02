@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 import { buildEvidenceCorpus } from '../../shared/argumentContext.ts';
+import { caseFileDocuments } from '../../shared/caseFile.ts';
 
 const SAFETY_FOOTER =
   'Draft for review. Check every authority and document reference against the originals before filing. Not legal advice.';
@@ -54,7 +55,7 @@ function buildPrompt(tests: Record<string, unknown>[], ourPoints: Record<string,
     "- Copy every quote character for character out of the document.",
     "- Status must be exactly one of: Covered, Partly covered, Not covered.",
     "- Covered means our own witness statement or an exhibit deals with the element and you can quote it. Partly covered means part of the element is dealt with and you say what is missing. Not covered means our documents do not deal with it.",
-    "- Our witness statements are the documents categorised Our witness statement. The other side statement, the N244, the judgment and other documents are NOT our evidence: use them only in other_side.",
+    "- Our witness statements are the case file documents in the Witness statements category whose party is Ours. The other side statement, the application notice, the judgment and every other document are NOT our evidence: use them only in other_side.",
     "- Never state what the law is. The legal bridge is described as an issue counsel must address in submissions (counsel needs to address whether ...), never as a legal conclusion.",
     "- The fact list contains FACTS ONLY: no case law, no legal argument, no opinion on the law, no invented dates or exhibits.",
     "",
@@ -82,7 +83,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Confirm a legal test before running the gap analysis.' });
     }
 
-    const files = listOf(await base44.entities.MatterFile.filter({ matter_id: matterId }));
+    const files = await caseFileDocuments(base44, matterId);
     const ourPoints = Array.isArray(body.our_points) ? body.our_points.slice(0, 40) : [];
     const built = buildEvidenceCorpus(files as never, MAX_FILES, 6000, 40000);
 

@@ -9,21 +9,22 @@ import fileToBase64 from '@/lib/fileToBase64';
 const MAX_TEXT = 120000;
 
 const CATEGORIES = [
-  { value: 'Case summary and pleadings', hint: 'Our case summary, particulars of claim or defence' },
-  { value: 'Our witness statement', hint: 'Statements served on our side' },
-  { value: 'Other party witness statement', hint: 'Statements served by the other party' },
-  { value: 'N244 and continuation sheet', hint: 'The application and its continuation sheet' },
-  { value: 'Previous judgments and orders', hint: 'Orders and judgments already made in this matter' },
-  { value: 'Other document', hint: 'Anything else that belongs in the bundle' },
+  { value: 'Previous judgments and orders', category: 'Judgments', party: 'Court', hint: 'Judgments already made in this matter' },
+  { value: 'Orders', category: 'Orders', party: 'Court', hint: 'Orders already made in this matter' },
+  { value: 'Our witness statement', category: 'Witness statements', party: 'Ours', hint: 'Statements served on our side' },
+  { value: 'Other party witness statement', category: 'Witness statements', party: 'Other side', hint: 'Statements served by the other party' },
+  { value: 'N244 and continuation sheet', category: 'Application notices', party: 'Ours', hint: 'The application and its continuation sheet' },
+  { value: 'Case summary and pleadings', category: 'Other', party: 'Ours', hint: 'Our case summary, particulars of claim or defence' },
+  { value: 'Other document', category: 'Other', party: 'Ours', hint: 'Anything else that belongs in the bundle' },
 ];
 
 export default function StepUpload({ matter, files, onChanged }) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
-  const upload = async (category, fileList) => {
+  const upload = async (slot, fileList) => {
     if (!fileList || fileList.length === 0) return;
-    setBusy(category);
+    setBusy(slot.value);
     setError('');
     try {
       for (const file of Array.from(fileList)) {
@@ -34,14 +35,18 @@ export default function StepUpload({ matter, files, onChanged }) {
         });
         if (response.data?.error) throw new Error(response.data.error);
         const text = response.data?.text || '';
-        await base44.entities.MatterFile.create({
+        await base44.entities.CaseFileDocument.create({
           matter_id: matter.id,
           file_name: file.name,
-          category,
+          category: slot.category,
+          party: slot.party,
+          document_date: new Date().toISOString().slice(0, 10),
+          record_status: 'Filed or served',
           file_uri: response.data?.file_uri || '',
           text: text.slice(0, MAX_TEXT),
           char_count: text.length,
           truncated: text.length > MAX_TEXT,
+          source: 'Case Workflow upload',
         });
       }
       await onChanged();
@@ -53,7 +58,7 @@ export default function StepUpload({ matter, files, onChanged }) {
   };
 
   const remove = async (id) => {
-    await base44.entities.MatterFile.delete(id);
+    await base44.entities.CaseFileDocument.delete(id);
     await onChanged();
   };
 
@@ -82,7 +87,9 @@ export default function StepUpload({ matter, files, onChanged }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {CATEGORIES.map((category) => {
-          const categoryFiles = files.filter((file) => file.category === category.value);
+          const categoryFiles = files.filter(
+            (file) => file.category === category.category && (file.party || 'Ours') === category.party
+          );
           return (
             <Card key={category.value} className="shadow-sm">
               <CardContent className="p-5">
@@ -103,7 +110,7 @@ export default function StepUpload({ matter, files, onChanged }) {
                       multiple
                       className="hidden"
                       onChange={(event) => {
-                        upload(category.value, event.target.files);
+                        upload(category, event.target.files);
                         event.target.value = '';
                       }}
                     />

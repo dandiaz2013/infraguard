@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 import { extractCandidates, buildCaseLink, courtFor, yearFor } from '../../shared/citationParser.ts';
+import { caseFileDocuments } from '../../shared/caseFile.ts';
 
 const MAX_DOCUMENTS = 40;
 const MAX_LISTED = 200;
@@ -19,7 +20,7 @@ export default async function (req) {
     );
     if (!matter) return Response.json({ error: 'Matter not found' }, { status: 404 });
 
-    const files = await base44.entities.MatterFile.filter({ matter_id: matterId });
+    const files = await caseFileDocuments(base44, matterId);
     const readable = files
       .filter((file) => typeof file.text === 'string' && file.text.trim())
       .slice(0, MAX_DOCUMENTS);

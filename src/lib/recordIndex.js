@@ -72,6 +72,13 @@ export function roleOf(document = {}) {
   const category = document.category || '';
   const name = `${document.name || document.file_name || ''} ${document.document_type || ''}`;
 
+  if (category === 'Judgments' || category === 'Orders' || category === 'Transcripts') return 'Court';
+  if (category === 'Witness statements') {
+    if (document.party === 'Other side') return 'Other party';
+    if (document.party === 'Court') return 'Court';
+    return 'Our side';
+  }
+  if (category === 'Application notices' || category === 'Skeleton arguments') return 'Our side';
   if (category === 'Previous judgments and orders') return 'Court';
   if (category === 'Our witness statement' || category === 'N244 and continuation sheet') return 'Our side';
   if (category === 'Other party witness statement') return 'Other party';

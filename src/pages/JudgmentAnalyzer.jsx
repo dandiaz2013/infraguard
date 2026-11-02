@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileText, Upload, Loader2, AlertCircle, CheckCircle2, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import fileToBase64 from '@/lib/fileToBase64';
@@ -15,12 +17,20 @@ export default function JudgmentAnalyzer() {
   const [judgmentFile, setJudgmentFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
+  const [selectedMatter, setSelectedMatter] = useState('');
+  const [savedNote, setSavedNote] = useState('');
+
+  const { data: matters = [] } = useQuery({
+    queryKey: ['matters'],
+    queryFn: () => base44.entities.Matter.filter({ status: 'Active' }),
+  });
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setJudgmentFile(file);
+    setSavedNote('');
     
     try {
       const fileBase64 = await fileToBase64(file);
@@ -30,8 +40,29 @@ export default function JudgmentAnalyzer() {
         fileBase64
       });
 
-      if (extractResponse.data?.text) {
-        setJudgmentText(extractResponse.data.text);
+      const text = extractResponse.data?.text || '';
+      if (text) {
+        setJudgmentText(text);
+
+        // An uploaded judgment belongs in the case file, which is the record.
+        if (selectedMatter) {
+          await base44.entities.CaseFileDocument.create({
+            matter_id: selectedMatter,
+            file_name: file.name,
+            category: 'Judgments',
+            party: 'Court',
+            document_date: new Date().toISOString().slice(0, 10),
+            record_status: 'Filed or served',
+            file_uri: extractResponse.data?.file_uri || '',
+            text: text.slice(0, 120000),
+            char_count: text.length,
+            truncated: text.length > 120000,
+            source: 'Judgment Analyzer upload'
+          });
+          setSavedNote('Saved to the Case File Library.');
+        } else {
+          setSavedNote('Choose a matter to save this judgment to the Case File Library.');
+        }
       }
     } catch (error) {
       console.error('File processing error:', error);
@@ -81,6 +112,20 @@ export default function JudgmentAnalyzer() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
+                <Label htmlFor="matter">Matter</Label>
+                <Select value={selectedMatter} onValueChange={setSelectedMatter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select matter..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {matters.map((matter) => (
+                      <SelectItem key={matter.id} value={matter.id}>{matter.matter_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
                 <Label htmlFor="file">Upload Judgment (PDF or Text)</Label>
                 <div className="mt-2">
                   <Input
@@ -91,6 +136,7 @@ export default function JudgmentAnalyzer() {
                     className="cursor-pointer"
                   />
                 </div>
+                {savedNote && <p className="mt-1 text-xs text-slate-500">{savedNote}</p>}
               </div>
 
               <div className="text-center text-sm text-slate-500">OR</div>

@@ -45,11 +45,18 @@ Deno.serve(async (req) => {
         : ''}`;
 
     const RECORD_RULES = `RECORD RULES:
-- Cite a document only by its exact name and the paragraph or page shown in the record above
+- Quote only from the source material listed below, by its exact name and paragraph shown
 - Never invent a quote, a paragraph number, a regulation, a case, a date or an exhibit
 - A statement by the other side must read "stated by <party>, <document>, <paragraph>" and must never be presented as established fact
 - Where the record does not deal with a point, write [FACT NEEDED] or [DOCUMENT REFERENCE NEEDED: document name] rather than filling the gap
 - End the document with: Draft for review. Check every document reference and authority against the originals before filing. Not legal advice.`;
+
+    const sourceMaterial = Array.isArray(body.source_material) ? body.source_material.slice(0, 40) : [];
+    const sourceContext = sourceMaterial.length === 0
+      ? '\n\n## SOURCE MATERIAL\nThe user ticked no case file document. Do not quote or cite any document.'
+      : `\n\n## SOURCE MATERIAL (the only documents this draft may quote)\n${sourceMaterial
+        .map((doc: any) => `- ${doc.name || 'Document'} (${doc.category || 'other'}, ${doc.party || 'party not recorded'}${doc.date ? `, ${doc.date}` : ''}) - ticked as: ${doc.reason || 'chosen by the user'}`)
+        .join('\n')}`;
 
     const authorities = Array.isArray(body.authorities) ? body.authorities.slice(0, 40) : [];
     const mainAuthorities = Array.isArray(body.main_authorities) ? body.main_authorities.slice(0, 20) : [];
@@ -65,7 +72,7 @@ Briefing Notes:
 ${briefingNotes}
 ${argumentContext}
 ${authoritiesContext}${buildMainAuthorityBlock(mainAuthorities)}
-${recordContext}
+${recordContext}${sourceContext}
 
 ${MAIN_AUTHORITY_RULES}
 

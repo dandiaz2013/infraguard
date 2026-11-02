@@ -13,7 +13,8 @@ import {
   BookOpen,
   Library,
   Gavel,
-  ListChecks
+  ListChecks,
+  FolderOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -26,6 +27,7 @@ export default function Layout({ children, currentPageName }) {
     { name: 'Research', icon: Search, href: createPageUrl('Research') },
     { name: 'ArgumentBuilder', icon: Scale, href: createPageUrl('ArgumentBuilder'), label: 'Arguments' },
     { name: 'DocumentGenerator', icon: FileText, href: createPageUrl('DocumentGenerator'), label: 'Documents' },
+    { name: 'CaseFileLibrary', icon: FolderOpen, href: '/CaseFileLibrary', label: 'Case File Library' },
     { name: 'JudgmentAnalyzer', icon: BookOpen, href: createPageUrl('JudgmentAnalyzer'), label: 'Analyzer' },
     { name: 'Judgments', icon: Gavel, href: createPageUrl('Judgments'), label: 'Judgments' },
     { name: 'CaseLawLibrary', icon: Library, href: createPageUrl('CaseLawLibrary'), label: 'Case Law Library' },

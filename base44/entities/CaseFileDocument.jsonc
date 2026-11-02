@@ -1,0 +1,142 @@
+{
+  "name": "CaseFileDocument",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter this case file document belongs to"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "Original file name"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Judgments",
+        "Orders",
+        "Witness statements",
+        "Exhibits",
+        "Application notices",
+        "Transcripts",
+        "Skeleton arguments",
+        "Correspondence",
+        "Contracts",
+        "Other"
+      ],
+      "description": "Category in the case file library"
+    },
+    "party": {
+      "type": "string",
+      "enum": [
+        "Ours",
+        "Other side",
+        "Court"
+      ],
+      "description": "Who the document comes from"
+    },
+    "document_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the document or of filing"
+    },
+    "case_number": {
+      "type": "string",
+      "description": "Case or claim number shown on the document"
+    },
+    "record_status": {
+      "type": "string",
+      "enum": [
+        "Filed or served",
+        "Draft",
+        "Reference only"
+      ],
+      "default": "Filed or served",
+      "description": "Filed or served documents are the record for this matter"
+    },
+    "file_uri": {
+      "type": "string",
+      "description": "Private storage URI for the uploaded file"
+    },
+    "text": {
+      "type": "string",
+      "description": "Extracted document text used as the record"
+    },
+    "char_count": {
+      "type": "number",
+      "description": "Length of the extracted text before truncation"
+    },
+    "truncated": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the stored text was truncated"
+    },
+    "exhibit_of": {
+      "type": "string",
+      "description": "Optional parent document this document is an exhibit to"
+    },
+    "source": {
+      "type": "string",
+      "description": "Where the document came in from"
+    },
+    "origin_id": {
+      "type": "string",
+      "description": "Id of the record this was copied or moved from"
+    }
+  },
+  "required": [
+    "matter_id",
+    "file_name",
+    "category"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

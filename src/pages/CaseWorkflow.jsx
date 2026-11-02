@@ -43,8 +43,14 @@ export default function CaseWorkflow() {
   });
 
   const filesQuery = useQuery({
-    queryKey: ['matterFiles', matterId],
-    queryFn: () => base44.entities.MatterFile.filter({ matter_id: matterId }),
+    queryKey: ['caseFileDocuments', matterId],
+    queryFn: async () => {
+      const page = await base44.entities.CaseFileDocument.filter(
+        { matter_id: matterId },
+        { sort: '-created_date', limit: 100 }
+      );
+      return page.items || [];
+    },
     enabled: !!matterId,
   });
 

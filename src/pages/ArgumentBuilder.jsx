@@ -29,6 +29,7 @@ import RegisterPanel from '@/components/argument/RegisterPanel';
 import useResolutionLoop from '@/hooks/useResolutionLoop';
 import { useNavigate } from 'react-router-dom';
 import fileToBase64 from '@/lib/fileToBase64';
+import { PARTY_TO_FILED_BY } from '@/lib/caseFile';
 
 export default function ArgumentBuilder() {
   const initialMatter = new URLSearchParams(window.location.search).get('matter') || '';
@@ -103,10 +104,14 @@ export default function ArgumentBuilder() {
     queryFn: () => base44.entities.AuthorityExtract.list('-added_date')
   });
 
+  // The record is read from the Case File Library only.
   const { data: matterFiles = [] } = useQuery({
-    queryKey: ['matterFiles', selectedMatter],
+    queryKey: ['caseFileDocuments', selectedMatter],
     queryFn: async () => {
-      const page = await base44.entities.MatterFile.filter({ matter_id: selectedMatter }, { limit: 30 });
+      const page = await base44.entities.CaseFileDocument.filter(
+        { matter_id: selectedMatter },
+        { sort: '-created_date', limit: 60 }
+      );
       return page.items || [];
     },
     enabled: !!selectedMatter
@@ -164,8 +169,8 @@ export default function ArgumentBuilder() {
           text: file.text || '',
           category: file.category,
           record_status: file.record_status,
-          filed_by: file.filed_by,
-          filed_date: file.filed_date,
+          filed_by: PARTY_TO_FILED_BY[file.party] || file.filed_by,
+          filed_date: file.document_date || file.filed_date,
           exhibit_of: file.exhibit_of
         })),
         ...uploadedDocuments.map((doc, index) => ({
@@ -280,8 +285,6 @@ export default function ArgumentBuilder() {
 
     setIsUploading(true);
     try {
-      const uploadedDocs = [];
-      
       for (const file of files) {
         const fileBase64 = await fileToBase64(file);
 
@@ -290,16 +293,26 @@ export default function ArgumentBuilder() {
           fileBase64
         });
 
-        if (extractResponse.data?.text) {
-          uploadedDocs.push({
-            name: file.name,
-            url: extractResponse.data.file_uri,
-            content: extractResponse.data.text
-          });
-        }
+        if (extractResponse.data?.error) throw new Error(extractResponse.data.error);
+        const text = extractResponse.data?.text || '';
+
+        // Uploads go straight into the Case File Library, which is the record.
+        await base44.entities.CaseFileDocument.create({
+          matter_id: selectedMatter,
+          file_name: file.name,
+          category: 'Other',
+          party: 'Ours',
+          document_date: new Date().toISOString().slice(0, 10),
+          record_status: 'Filed or served',
+          file_uri: extractResponse.data?.file_uri || '',
+          text: text.slice(0, 120000),
+          char_count: text.length,
+          truncated: text.length > 120000,
+          source: 'Argument Builder upload'
+        });
       }
 
-      setUploadedDocuments([...uploadedDocuments, ...uploadedDocs]);
+      queryClient.invalidateQueries({ queryKey: ['caseFileDocuments', selectedMatter] });
     } catch (error) {
       console.error('Upload error:', error);
       alert('Failed to upload documents');
@@ -416,7 +429,7 @@ export default function ArgumentBuilder() {
             id: file.id,
             name: file.file_name,
             content: file.text || '',
-            filed_by: file.filed_by || '',
+            filed_by: PARTY_TO_FILED_BY[file.party] || file.filed_by || '',
             record_status: file.record_status || 'Filed or served'
           })),
           ...uploadedDocuments.map((doc, idx) => ({
@@ -555,8 +568,8 @@ export default function ArgumentBuilder() {
 
   const handleRecordChange = async (id, patch) => {
     if (String(id).startsWith('upload-')) return;
-    await base44.entities.MatterFile.update(id, patch);
-    queryClient.invalidateQueries({ queryKey: ['matterFiles', selectedMatter] });
+    await base44.entities.CaseFileDocument.update(id, patch);
+    queryClient.invalidateQueries({ queryKey: ['caseFileDocuments', selectedMatter] });
   };
 
   const handleAskQuestions = async () => {

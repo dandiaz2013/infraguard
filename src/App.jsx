@@ -11,6 +11,7 @@ import CaseLawLibrary from './pages/CaseLawLibrary';
 import CaseLawDetail from './pages/CaseLawDetail';
 import Judgments from './pages/Judgments';
 import CaseWorkflow from './pages/CaseWorkflow';
+import CaseFileLibrary from './pages/CaseFileLibrary';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -80,6 +81,11 @@ const AuthenticatedApp = () => {
       <Route path="/CaseWorkflow" element={
         <LayoutWrapper currentPageName="CaseWorkflow">
           <CaseWorkflow />
+        </LayoutWrapper>
+      } />
+      <Route path="/CaseFileLibrary" element={
+        <LayoutWrapper currentPageName="CaseFileLibrary">
+          <CaseFileLibrary />
         </LayoutWrapper>
       } />
       <Route path="*" element={<PageNotFound />} />

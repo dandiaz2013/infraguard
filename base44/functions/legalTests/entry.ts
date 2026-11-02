@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 import { buildEvidenceCorpus } from '../../shared/argumentContext.ts';
+import { caseFileDocuments } from '../../shared/caseFile.ts';
 
 const MAX_FILES = 12;
 const MAX_EXTRACT_CHARS = 1200;
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
     if (!matterId) return Response.json({ error: 'matter_id is required' }, { status: 400 });
 
     const matter = await base44.entities.Matter.get(matterId);
-    const files = listOf(await base44.entities.MatterFile.filter({ matter_id: matterId }));
+    const files = await caseFileDocuments(base44, matterId);
     const caseLaw = await base44.entities.CaseLaw.filter({ is_main: true });
     const extracts = listOf(await base44.entities.AuthorityExtract.list('-added_date', 100)).filter((extract) =>
       caseLaw.some((record) => record.id === extract.case_law_id)
