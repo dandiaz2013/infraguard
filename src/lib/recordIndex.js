@@ -20,6 +20,8 @@ const PARA_MARK =
   /^\s*(?:\[(\d{1,3})\]|(\d{1,3})(?:\(([a-z0-9ivx]{1,4})\))?[.)]\s*|(\d{1,3})(?:\(([a-z0-9ivx]{1,4})\))?[.)]?\s{2,}(?=[A-Z(“]))/;
 const DECIMAL = /^\s*\d{1,3}\.\d/;
 const PAGE_MARK = /^\s*(?:page|p\.?)\s*(\d{1,3})\b/i;
+const STATEMENT =
+  /\b(is|are|was|were|has|have|had|did|does|do|will|would|can|could|must|shall|may|apply|applies|seeks?|ordered|orders?|dismissed|refused|found|held|knew|knows?|aware|says?|said|states?|stated|contends?|denies|agrees?|accepted|provides?|requires?|directed|recovered|obtained|withdrawn|failed)\b/i;
 const MAX_SEGMENTS = 400;
 const MAX_ITEMS = 600;
 
@@ -104,8 +106,10 @@ function segmentize(text) {
     .split('\n');
 
   const paragraphs = [];
+  const preamble = { ref: 'preamble', lines: [] };
   let current = null;
   let sawParagraph = false;
+  let started = false;
 
   for (const raw of lines) {
     if (DECIMAL.test(raw)) {
@@ -113,17 +117,27 @@ function segmentize(text) {
       continue;
     }
     const marker = raw.match(PARA_MARK);
-    if (marker) {
+    const rest = marker ? raw.slice(marker[0].length).trim() : '';
+    // A numbered line is a paragraph only when it states something. An address list or a
+    // numbered list of parties is not a paragraph.
+    const statesSomething =
+      Boolean(marker) &&
+      (STATEMENT.test(rest) || (rest.length >= 25 && /[.!?]$/.test(rest)));
+    if (statesSomething) {
+      if (!started) {
+        started = true;
+        if (preamble.lines.join(' ').trim().length > 1) paragraphs.push(preamble);
+      }
       sawParagraph = true;
       const number = Number(marker[1] || marker[2] || marker[4]);
       const sub = marker[3] || marker[5] || '';
       current = { ref: `para ${number}${sub ? `(${sub})` : ''}`, lines: [] };
-      const rest = raw.slice(marker[0].length).trim();
       if (rest) current.lines.push(rest);
       paragraphs.push(current);
       continue;
     }
     if (current) current.lines.push(raw.trim());
+    else preamble.lines.push(raw.trim());
   }
   if (sawParagraph) return { segments: segmentList(paragraphs), mode: 'paragraph' };
 
@@ -275,8 +289,12 @@ export function indexDocument(document = {}) {
   doc.record_status = document.record_status || 'Filed or served';
   doc.filed_by = document.filed_by || '';
   doc.filed_date = document.document_date || document.filed_date || '';
-  // The document's own date wins; the stored date is only a fallback.
-  doc.doc_date = dateFromDocument(doc.text, verdict.category) || doc.filed_date || '';
+  // The document's own date wins; the file name and the stored date are fallbacks.
+  doc.doc_date =
+    dateFromDocument(doc.text, verdict.category) ||
+    dateFromDocument(doc.name, verdict.category) ||
+    doc.filed_date ||
+    '';
   doc.exhibit_of = document.exhibit_of || '';
 
   const built = segmentize(doc.text);

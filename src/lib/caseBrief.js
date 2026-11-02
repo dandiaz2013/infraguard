@@ -13,7 +13,7 @@ export function buildCaseBrief({ matter, gateway = [], promptness = null, missin
         order ? `the order dated ${order.date_text}` : 'the order challenged'
       }.`,
       relief?.ours
-        ? `Relief sought: “${relief.ours.quote}” (${relief.ours.document_name}, ${relief.ours.ref}).`
+        ? `Relief sought is stated at ${relief.ours.document_name}, ${relief.ours.ref}.`
         : 'The relief sought is not yet in the record.',
       route?.ours ? '' : 'The rule relied on is not yet in the record.'
     ]

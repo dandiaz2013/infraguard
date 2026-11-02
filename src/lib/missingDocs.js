@@ -10,8 +10,9 @@ import { clip } from '@/lib/recordIndex';
 const DATE_SRC =
   '\\d{1,2}(?:st|nd|rd|th)?\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{4}';
 
+// Case-insensitive without the /i flag, so the judge-name pattern stays uppercase-only.
 const TYPE_WORDS =
-  'judgment|judgement|order|witness statement|transcript|skeleton argument|application notice|N244|claim form|particulars of claim|defence|notice of appeal|exhibit';
+  '[Jj]udgment|[Jj]udgement|[Oo]rder|[Ww]itness [Ss]tatement|[Tt]ranscript|[Ss]keleton [Aa]rgument|[Aa]pplication [Nn]otice|N244|[Cc]laim [Ff]orm|[Pp]articulars of [Cc]laim|[Dd]efence|[Nn]otice of [Aa]ppeal|[Ee]xhibit';
 
 const TYPE_LABEL = {
   judgment: 'Judgment',
@@ -46,16 +47,17 @@ const JUDGE =
   "(?:Master|District Judge|Deputy District Judge|HHJ|His Honour Judge|Her Honour Judge|Mr Justice|Mrs Justice|Lord Justice|Lady Justice|Recorder)(?:\\s+[A-Z][A-Za-z.\\u2019'\\-]+){1,3}";
 
 const WITH_DATE = new RegExp(
-  `\\b(${TYPE_WORDS})\\b(?:\\s+of)?\\s*(${JUDGE})?\\s*(?:,?\\s*(?:dated|of)\\s*:?\\s*)(${DATE_SRC})`,
-  'gi'
+  `\\b(${TYPE_WORDS})\\b(?:\\s+of)?\\s*(${JUDGE})?\\s*(?:,?\\s*(?:[Dd]ated|[Oo]f)\\s*:?\\s*)(${DATE_SRC})`,
+  'g'
 );
-const WITH_JUDGE = new RegExp(`\\b(${TYPE_WORDS})\\b\\s+of\\s+(${JUDGE})`, 'gi');
-const WITH_CITATION = new RegExp(`\\b(judgment|judgement|order)\\b[^.]{0,80}?(${NEUTRAL})`, 'gi');
+const WITH_JUDGE = new RegExp(`\\b(${TYPE_WORDS})\\b\\s+[Oo]f\\s+(${JUDGE})`, 'g');
+const WITH_CITATION = new RegExp(`\\b([Jj]udgment|[Jj]udgement|[Oo]rder)\\b[^.]{0,80}?(${NEUTRAL})`, 'g');
 
+// One document, one entry: the strongest identifier decides the key, so "order dated X"
+// and "order of Master Brown dated X" merge.
 function keyFor(parts) {
-  return normalise(
-    [parts.type, parts.date || '', parts.citation || '', parts.case_number || '', parts.judge || ''].join(' ')
-  );
+  const identifier = parts.date || parts.citation || parts.case_number || parts.judge || '';
+  return normalise(`${parts.type} ${identifier}`);
 }
 
 function labelFor(parts) {
@@ -97,7 +99,16 @@ export function detectMissingDocuments(record) {
     if (!clean.date && !clean.citation && !clean.judge && !clean.case_number) return;
     const key = keyFor(clean);
     if (!key) return;
-    if (!found.has(key)) {
+    // The same document mentioned twice is one entry: same type and the same date,
+    // citation or judge.
+    const existing = [...found.values()].find(
+      (item) =>
+        item.type === clean.type &&
+        ((clean.date && item.date === clean.date) ||
+          (clean.citation && item.citation === clean.citation) ||
+          (clean.judge && item.judge && item.judge === clean.judge))
+    );
+    if (!existing && !found.has(key)) {
       found.set(key, {
         id: `referred-${key.replace(/\s+/g, '-').slice(0, 50)}`,
         label: labelFor(clean),
@@ -109,7 +120,13 @@ export function detectMissingDocuments(record) {
         refs: []
       });
     }
-    const entry = found.get(key);
+    const entry = existing || found.get(key);
+    // Fill in anything this later mention tells us that the first one did not.
+    if (!entry.judge && clean.judge) entry.judge = clean.judge;
+    if (!entry.date && clean.date) entry.date = clean.date;
+    if (!entry.citation && clean.citation) entry.citation = clean.citation;
+    if (!entry.case_number && clean.case_number) entry.case_number = clean.case_number;
+    entry.label = labelFor(entry);
     if (segment && !entry.refs.some((ref) => ref.document_name === segment.document_name && ref.ref === segment.ref)) {
       entry.refs.push({
         document_name: segment.document_name,

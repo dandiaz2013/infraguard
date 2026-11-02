@@ -8,7 +8,7 @@ const LONG = new RegExp(
   `\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${Object.keys(MONTHS).join('|')})\\s+(\\d{4})\\b`,
   'gi'
 );
-const NUMERIC = /\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g;
+const NUMERIC = /\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/g;
 
 function iso(year, month, day) {
   const pad = (value) => String(value).padStart(2, '0');
@@ -65,6 +65,23 @@ export function dateFromDocument(text = '', category = '') {
   if (category === 'Orders') {
     anchors.push(/(?:DATED|dated|Date of order)[^\n.]{0,60}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/);
   }
+  if (category === 'Judgments') {
+    anchors.push(/(?:^|\n)\s*Date\s*:\s*([^\n]{6,30})/);
+  }
+  if (category === 'Application notices') {
+    anchors.push(
+      /(?:N244|application notice)[^\n]{0,80}?[Dd]ated\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-]\d{4}|[^\n]{6,30})/i,
+      /[Dd]ated\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-]\d{4}|\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i
+    );
+  }
+  if (category === 'Witness statements') {
+    // Only a date next to the heading or the signature: a date inside the evidence is a fact,
+    // not the date of the statement.
+    anchors.push(
+      /(?:^|\n)\s*[^\n]{0,60}?(?:statement|dated)\s+(?:of\s+)?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i,
+      /dated\s*:?\s*(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)\s*$/im
+    );
+  }
   if (category === 'Correspondence') {
     anchors.push(/^\s*(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/m, /(?:^|\n)\s*date:\s*([^\n]{4,30})/i);
   }
@@ -76,6 +93,8 @@ export function dateFromDocument(text = '', category = '') {
       if (value) return value;
     }
   }
+  // A witness statement's date is never guessed from a date in the evidence.
+  if (category === 'Witness statements') return '';
   return firstDateIn(head);
 }
 

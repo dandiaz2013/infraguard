@@ -68,7 +68,7 @@ export function buildGateway({ record, extracts = [], promptness = null } = {}) 
     );
     const theirs = line(
       findAnswer(record, {
-        terms: ['jurisdiction', 'no power', 'wrong route', 'should have appealed', 'permission to appeal'],
+        terms: ['jurisdiction', 'no power', 'wrong route', 'should have appealed', 'not the right application', 'abuse of process'],
         roles: THEM,
         minHits: 1
       })
@@ -211,7 +211,17 @@ export function buildGateway({ record, extracts = [], promptness = null } = {}) 
     const measured = Boolean(promptness?.order?.date && promptness?.application?.date);
     const verdict = !measured
       ? { rating: 'Weak', reason: 'The record does not show both dates, so the interval cannot be measured.' }
-      : rate(ours, theirs, ext, measured ? 'measured' : '');
+      : ours
+        ? {
+            rating: 'Arguable',
+            reason: `The interval is ${promptness.interval}. ${ours.document_name}, ${ours.ref} explains it${
+              theirs ? `, and ${theirs.document_name}, ${theirs.ref} answers it for them` : ''
+            }. Promptness is for the court to weigh on all the circumstances.`
+          }
+        : {
+            rating: 'Weak',
+            reason: `The interval is ${promptness.interval} and no verified record paragraph explains it.`
+          };
     issues.push({
       id: 'promptness',
       number: 5,

@@ -177,7 +177,16 @@ export default function ArgumentBuilder() {
     () => dedupeAuthorities(caseLaw.filter((entry) => entry.is_main === true)).items,
     [caseLaw]
   );
-  const mainAuthorityId = procedural.main_authority_id || mainAuthorityPool[0]?.id || '';
+  // Default to a main authority that is not one of the judgments being challenged.
+  const challengedNames = matterFiles
+    .filter((file) => file.category === 'Judgments' || file.category === 'Orders')
+    .map((file) => String(file.file_name || '').toLowerCase().replace(/\.[a-z0-9]+$/, ''));
+  const preferredAuthority =
+    mainAuthorityPool.find((record) => {
+      const name = String(record.name || '').toLowerCase();
+      return name && !challengedNames.some((file) => file.includes(name) || name.includes(file));
+    }) || null;
+  const mainAuthorityId = procedural.main_authority_id || preferredAuthority?.id || mainAuthorityPool[0]?.id || '';
   const mainAuthority = mainAuthorityPool.find((record) => record.id === mainAuthorityId) || null;
 
   const documentPool = useMemo(
