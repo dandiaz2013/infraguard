@@ -382,7 +382,8 @@ export default function ArgumentBuilder() {
             .map((extract) => ({
               paragraph_ref: extract.paragraph_ref,
               extract_text: extract.extract_text,
-              proposition: extract.proposition || ''
+              proposition: extract.proposition || '',
+              status: extract.status || '',
             }))
         })),
         question_answers: questions
@@ -731,6 +732,8 @@ export default function ArgumentBuilder() {
     } else if (type === 'clause') {
       document.getElementById('material-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       document.getElementById('clause-reference')?.focus();
+    } else if (type === 'find_test') {
+      document.getElementById('find-test')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (type === 'test') {
       document.getElementById('legal-tests')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (type === 'factlist') {
@@ -1073,6 +1076,21 @@ export default function ArgumentBuilder() {
             currentMatter={currentMatter}
             authorities={authorities}
             position={position}
+            extracts={authorityExtracts
+              .filter((extract) => mainAuthorityPool.some((record) => record.id === extract.case_law_id))
+              .map((extract) => ({
+                authority: mainAuthorityPool.find((record) => record.id === extract.case_law_id)?.name || '',
+                citation: mainAuthorityPool.find((record) => record.id === extract.case_law_id)?.neutral_citation || '',
+                paragraph_ref: extract.paragraph_ref || '',
+                exact_text: extract.extract_text || '',
+                proposition: extract.proposition || '',
+                status:
+                  extract.status ||
+                  (mainAuthorityPool.find((record) => record.id === extract.case_law_id)?.check_status ===
+                  'Extract checked against official text'
+                    ? 'Extract checked against official text'
+                    : 'Proposed - compare with the official text'),
+              }))}
           />
 
           {/* Results Panel */}
@@ -1179,6 +1197,10 @@ export default function ArgumentBuilder() {
               tests={legalTests}
               extracts={authorityExtracts}
               caseLaw={mainAuthorities}
+              points={[
+                ...ourPoints.map((point) => ({ kind: 'our point', text: point.text })),
+                ...misstatements.map((entry) => ({ kind: 'misstatement', text: entry.statement })),
+              ]}
               onRefresh={() => {
                 queryClient.invalidateQueries({ queryKey: ['legalTests', selectedMatter] });
                 queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });

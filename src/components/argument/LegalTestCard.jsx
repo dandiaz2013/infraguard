@@ -39,6 +39,7 @@ export default function LegalTestCard({ test, extracts = [], caseLaw = [], onRef
           source_document_name: element.source_document_name || '',
           source_paragraph_ref: element.source_paragraph_ref || '',
           source_quote: element.source_quote || '',
+          against_us: element.against_us === true,
           user_confirmed: status === 'Confirmed by user' ? true : Boolean(element.user_confirmed),
         }));
 

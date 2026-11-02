@@ -30,6 +30,15 @@ export default function ChecklistTable({ checklist }) {
             </div>
           </div>
           <p className="text-xs text-slate-600 mt-1">{item.reason}</p>
+          {item.details?.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {item.details.map((line, index) => (
+                <li key={index} className="text-[11px] text-slate-500">
+                  • {line}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       ))}
     </div>

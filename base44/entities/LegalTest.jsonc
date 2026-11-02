@@ -48,6 +48,11 @@
           },
           "source_quote": {
             "type": "string"
+          },
+          "against_us": {
+            "type": "boolean",
+            "default": false,
+            "description": "A factor that counts against the applicant (known or knowable facts, delay, prejudice, finality) that must be addressed"
           }
         }
       }

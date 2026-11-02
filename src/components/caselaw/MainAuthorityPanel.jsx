@@ -1,5 +1,5 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -9,8 +9,10 @@ import { Gavel, ExternalLink } from 'lucide-react';
 import CheckStatusBadge from '@/components/caselaw/CheckStatusBadge';
 import CheckPackButton from '@/components/caselaw/CheckPackButton';
 import ExtractList from '@/components/caselaw/ExtractList';
+import AuthorityTestFinder from '@/components/authority/AuthorityTestFinder';
 
 export default function MainAuthorityPanel({ matterId }) {
+  const queryClient = useQueryClient();
   const { data: caseLaw = [] } = useQuery({
     queryKey: ['caseLaw'],
     queryFn: () => base44.entities.CaseLaw.list('-created_date'),
@@ -83,6 +85,17 @@ export default function MainAuthorityPanel({ matterId }) {
                           (extract.matter_ids || []).length === 0 || (extract.matter_ids || []).includes(matterId)
                       )}
                       emptyText="No paragraph extract stored. Cite by name and citation only: [NO EXTRACT - PARAGRAPH NEEDED]"
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <AuthorityTestFinder
+                      record={record}
+                      matterId={matterId || ''}
+                      onSaved={() => {
+                        queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });
+                        queryClient.invalidateQueries({ queryKey: ['caseLaw'] });
+                        queryClient.invalidateQueries({ queryKey: ['legalTests'] });
+                      }}
                     />
                   </div>
                 </div>

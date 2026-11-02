@@ -14,6 +14,7 @@ import CheckStatusBadge from '@/components/caselaw/CheckStatusBadge';
 import CheckPackButton from '@/components/caselaw/CheckPackButton';
 import CheckVerificationForm from '@/components/caselaw/CheckVerificationForm';
 import ExtractList from '@/components/caselaw/ExtractList';
+import AuthorityTestFinder from '@/components/authority/AuthorityTestFinder';
 import { contextTypeLabel } from '@/lib/taxonomy';
 
 export default function CaseLawDetail() {
@@ -174,8 +175,18 @@ export default function CaseLawDetail() {
             <CardContent>
               <ExtractList extracts={recordExtracts} />
               <p className="text-xs text-slate-500 mt-3">
-                Arguments and documents quote only this wording, with the case name, neutral citation and paragraph reference.
+                Arguments and documents quote only checked wording, with the case name, neutral citation and paragraph reference.
               </p>
+              <div className="mt-4">
+                <AuthorityTestFinder
+                  record={record}
+                  onSaved={() => {
+                    queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });
+                    queryClient.invalidateQueries({ queryKey: ['caseLaw', caseLawId] });
+                    queryClient.invalidateQueries({ queryKey: ['legalTests'] });
+                  }}
+                />
+              </div>
             </CardContent>
           </Card>
         )}

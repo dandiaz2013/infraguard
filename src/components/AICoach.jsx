@@ -10,6 +10,7 @@ export default function AICoach({
   generatedArgument, 
   currentMatter, 
   authorities = [],
+  extracts = [],
   position 
 }) {
   const [feedback, setFeedback] = useState(null);
@@ -29,7 +30,8 @@ export default function AICoach({
         matterType: currentMatter?.matter_type,
         factPattern,
         generatedArgument: generatedArgument?.full_argument_markdown,
-        authorities: authorities.map((a) => ({ title: a.title, citation: a.citation }))
+        authorities: authorities.map((a) => ({ title: a.title, citation: a.citation })),
+        extracts,
       });
 
       setFeedback(response.data.feedback);
@@ -163,6 +165,23 @@ export default function AICoach({
                 </div>
               )}
 
+              {/* Extract warnings */}
+              {feedback.extract_warnings?.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    Warnings in the stored extracts
+                  </h4>
+                  <div className="space-y-2">
+                    {feedback.extract_warnings.map((warning, idx) => (
+                      <div key={idx} className="bg-amber-50 border border-amber-200 p-2 rounded text-sm text-amber-900">
+                        {(warning.authority || 'Authority') + (warning.paragraph_ref ? `, ${warning.paragraph_ref}` : '')}: {warning.warning}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Strengths */}
               {feedback.strengths?.length > 0 && (
                 <div>
@@ -207,6 +226,9 @@ export default function AICoach({
                         <p className="text-xs text-slate-700">
                           <span className="font-medium text-green-800">Address by:</span> {c.how_to_address}
                         </p>
+                        {c.source && (
+                          <p className="mt-1 text-[11px] text-slate-500">Rests on: {c.source}</p>
+                        )}
                       </div>
                     ))}
                   </div>

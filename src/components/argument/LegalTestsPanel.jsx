@@ -4,9 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, Scale, ClipboardPaste } from 'lucide-react';
 import LegalTestCard from '@/components/argument/LegalTestCard';
-import ExtractPasteBox from '@/components/argument/ExtractPasteBox';
+import AuthorityTestFinder from '@/components/authority/AuthorityTestFinder';
 
-export default function LegalTestsPanel({ matterId, tests = [], extracts = [], caseLaw = [], onRefresh }) {
+export default function LegalTestsPanel({ matterId, tests = [], extracts = [], caseLaw = [], points = [], onRefresh }) {
   const [busy, setBusy] = useState(false);
   const [needed, setNeeded] = useState([]);
   const [message, setMessage] = useState('');
@@ -81,25 +81,44 @@ export default function LegalTestsPanel({ matterId, tests = [], extracts = [], c
 
         {needed.length > 0 && (
           <div className="space-y-3">
-            {needed.map((item) => (
-              <div key={`${item.case_law_id}-${item.proposition}`} className="space-y-2">
-                <p className="text-sm text-amber-900 flex items-start gap-2">
-                  <ClipboardPaste className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                  EXTRACT NEEDED: paste the paragraph from {item.case_name || 'the authority'} that sets out the test
-                  {item.proposition ? ` (${item.proposition})` : ''}.
-                </p>
-                <ExtractPasteBox
-                  caseLaw={caseLaw}
-                  defaultCaseId={item.case_law_id || ''}
-                  proposition={item.proposition || ''}
-                  onSaved={() => {
-                    if (onRefresh) onRefresh();
-                  }}
-                />
-              </div>
-            ))}
+            {needed.map((item) => {
+              const authorityRecord = caseLaw.find((record) => record.id === item.case_law_id);
+              return (
+                <div key={`${item.case_law_id}-${item.proposition}`} className="space-y-2">
+                  <p className="text-sm text-amber-900 flex items-start gap-2">
+                    <ClipboardPaste className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    No stored extract sets out the test
+                    {item.proposition ? ` (${item.proposition})` : ''}. Find it in this authority instead of pasting it.
+                  </p>
+                  {authorityRecord && (
+                    <AuthorityTestFinder
+                      record={authorityRecord}
+                      matterId={matterId || ''}
+                      points={points}
+                      onSaved={() => {
+                        if (onRefresh) onRefresh();
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+
+        <div id="find-test" className="space-y-2">
+          {caseLaw
+            .filter((record) => record.is_main === true)
+            .map((record) => (
+              <AuthorityTestFinder
+                key={record.id}
+                record={record}
+                matterId={matterId || ''}
+                points={points}
+                onSaved={onRefresh}
+              />
+            ))}
+        </div>
 
         {tests.length === 0 ? (
           <p className="text-sm text-slate-500">No legal test recorded for this matter yet.</p>

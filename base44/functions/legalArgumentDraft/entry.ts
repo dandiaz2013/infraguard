@@ -191,11 +191,10 @@ Generate a professional, court-ready legal argument with:
 Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.
 
 End the draft with this exact line on its own:
-Draft for review. Check every authority and document reference against the originals before filing. Not legal advice.`;
+Draft for review. Check every authority against the official judgment before filing. Not legal advice.`;
 
     const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
       prompt,
-      add_context_from_internet: true,
     });
 
     return Response.json({ argument: typeof result === 'string' ? result : JSON.stringify(result) });

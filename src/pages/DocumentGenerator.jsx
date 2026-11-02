@@ -156,6 +156,7 @@ export default function DocumentGenerator() {
               paragraph_ref: extract.paragraph_ref,
               extract_text: extract.extract_text,
               proposition: extract.proposition || '',
+              status: extract.status || '',
             })),
         }))
       });

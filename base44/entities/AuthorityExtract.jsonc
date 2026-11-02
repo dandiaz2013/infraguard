@@ -8,15 +8,67 @@
     },
     "paragraph_ref": {
       "type": "string",
-      "description": "Paragraph reference, e.g. \"para 21\" or \"paras 40-42\""
+      "description": "Paragraph reference exactly as printed, including any sub-paragraph, e.g. \"39\" or \"39(ii)\""
     },
     "extract_text": {
       "type": "string",
-      "description": "Exact wording of the paragraph, as pasted"
+      "description": "Exact wording of the paragraph, as stored in the judgment text"
     },
     "proposition": {
       "type": "string",
       "description": "One line stating what this paragraph is used for"
+    },
+    "helps_hurts": {
+      "type": "string",
+      "enum": [
+        "Helps us",
+        "Hurts us",
+        "Both",
+        "Not classified"
+      ],
+      "default": "Not classified",
+      "description": "Whether the paragraph supports or cuts against our position"
+    },
+    "supports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Our points or misstatements this paragraph supports or undermines"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Proposed - compare with the official text",
+        "Extract checked against official text"
+      ],
+      "default": "Extract checked against official text",
+      "description": "Only checked extracts are quotable in a draft"
+    },
+    "checked_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the user compared this extract with the official text"
+    },
+    "checked_notes": {
+      "type": "string",
+      "description": "The user's note recorded when checking the extract"
+    },
+    "source_url": {
+      "type": "string",
+      "description": "The official page the extract was taken from"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "AuthoritySource record holding the full stored judgment text"
     },
     "source_file_url": {
       "type": "string",

@@ -1,0 +1,107 @@
+{
+  "name": "AuthoritySource",
+  "type": "object",
+  "properties": {
+    "case_law_id": {
+      "type": "string",
+      "description": "Case Law Library record this judgment text belongs to"
+    },
+    "source_url": {
+      "type": "string",
+      "description": "The single official page the text was fetched from"
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": [
+        "official_url",
+        "uploaded",
+        "pasted"
+      ],
+      "default": "official_url",
+      "description": "Where the stored text came from"
+    },
+    "text": {
+      "type": "string",
+      "description": "Full judgment text, stored so paragraph references can be checked"
+    },
+    "char_count": {
+      "type": "number",
+      "description": "Length of the text before any truncation"
+    },
+    "truncated": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the stored text was truncated"
+    },
+    "paragraph_count": {
+      "type": "number",
+      "description": "Number of numbered paragraphs and sub-paragraphs found"
+    },
+    "licence": {
+      "type": "string",
+      "description": "Licence note shown with the stored text"
+    },
+    "fetched_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the text was fetched or supplied"
+    },
+    "note": {
+      "type": "string",
+      "description": "What was fetched and any truncation note"
+    }
+  },
+  "required": [
+    "case_law_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

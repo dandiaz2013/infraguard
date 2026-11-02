@@ -12,6 +12,7 @@ const BUTTON_LABELS = {
   point: 'Add a point',
   test: 'Confirm the test',
   factlist: 'Open fact list',
+  find_test: 'Find the test',
 };
 
 const EFFORT_STYLE = {
@@ -48,7 +49,7 @@ export default function ImproveActions({ actions, onAction }) {
                   </div>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => onAction(action.button)} className="flex-shrink-0">
-                  {BUTTON_LABELS[action.button] || 'Do this'}
+                  {action.button_label || BUTTON_LABELS[action.button] || 'Do this'}
                 </Button>
               </div>
             ))}

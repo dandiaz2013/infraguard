@@ -1,5 +1,7 @@
 // Deterministic prospects checklist. No AI, no percentage, no prediction of outcome.
-import { checkQuotations, normalise } from '@/lib/authorityCheck';
+import { normalise } from '@/lib/authorityCheck';
+import { buildChronology } from '@/lib/chronology';
+import { isExtractChecked } from '@/lib/extractStatus';
 
 export const RATINGS = ['Weak', 'Arguable', 'Reasonable', 'Strong'];
 
@@ -67,30 +69,45 @@ export function computeProspects({
   };
   const checklist = [];
 
-  // 1. Legal test supported by a stored extract
-  const quotations = checkQuotations(draft, extracts);
-  const matched = quotations.filter((entry) => entry.matched);
-  const testExtract = matched
-    .map((entry) => extracts.find((extract) => normalise(extract.extract_text).includes(normalise(entry.quote))))
-    .filter(Boolean)
-    .find((extract) => /\btest\b/i.test(`${extract.proposition || ''} ${extract.extract_text || ''}`));
-
-  checklist.push(
-    makeItem(
-      'legal_test',
-      'Legal test identified and supported by a stored authority extract',
-      'High',
-      testExtract ? 'Yes' : matched.length > 0 ? 'Partly' : 'No',
-      testExtract
-        ? `The stored extract at ${testExtract.paragraph_ref || 'no paragraph reference'} states the test.`
-        : matched.length > 0
-          ? `${matched.length} stored extract${matched.length === 1 ? ' is' : 's are'} quoted, but none of them states the legal test.`
-          : 'No stored authority extract is quoted in the argument.',
-      'Add the authority extract that states the legal test.',
-      'Medium',
-      'authority'
-    )
+  const checkedExtracts = extracts.filter((extract) =>
+    isExtractChecked(extract, caseLaw.find((entry) => entry.id === extract.case_law_id))
   );
+  const confirmedTestsNow = (legalTests || []).filter((test) => test.status === 'Confirmed by user');
+  const testsFromChecked = confirmedTestsNow.filter(
+    (test) =>
+      (test.elements || []).length > 0 &&
+      (test.elements || []).every(
+        (element) =>
+          element.source_extract_id && checkedExtracts.some((extract) => extract.id === element.source_extract_id)
+      )
+  );
+
+  // 1. Legal test built from checked extracts
+  const authorityToFind =
+    caseLaw.find(
+      (record) =>
+        record.is_main === true && !checkedExtracts.some((extract) => extract.case_law_id === record.id)
+    ) || caseLaw.find((record) => record.is_main === true);
+  const findLabel = authorityToFind ? `Find the test in ${authorityToFind.name}` : 'Find the test in the authority';
+
+  checklist.push({
+    ...makeItem(
+      'legal_test',
+      'Legal test built from extracts checked against the official text',
+      'High',
+      testsFromChecked.length > 0 ? 'Yes' : confirmedTestsNow.length > 0 ? 'Partly' : 'No',
+      testsFromChecked.length > 0
+        ? `“${testsFromChecked[0].name}” is built from ${checkedExtracts.length} checked extract${checkedExtracts.length === 1 ? '' : 's'}.`
+        : confirmedTestsNow.length > 0
+          ? 'A confirmed test exists, but not every element is linked to an extract checked against the official text.'
+          : 'No confirmed legal test is built from checked extracts for this matter.',
+      `${findLabel}, tick each extract you compared with the official text, then confirm the elements.`,
+      'Medium',
+      'find_test'
+    ),
+    button_label: findLabel,
+    find_authority: authorityToFind?.name || '',
+  });
 
   // 2. Key authorities checked against the official text
   const draftNorm = normalise(draft);
@@ -267,9 +284,21 @@ export function computeProspects({
   const partlyElements = Number(elementCounts.partly || 0);
   const notCoveredElements = Number(elementCounts.not_covered || 0);
   const uncoveredElement = (gap?.element_results || []).find((row) => row.status === 'Not covered');
+  const elementRows = gap?.element_results || [];
+  const elementLines = elementRows
+    .slice(0, 14)
+    .map(
+      (row) =>
+        `${row.test_name ? `${row.test_name} ` : ''}Element ${row.element_number}: ${row.status}${row.missing ? ` — ${row.missing}` : ''}`
+    );
+  const uncoveredRows = elementRows.filter((row) => row.status !== 'Covered').slice(0, 2);
+  const gapFixes = uncoveredRows.map(
+    (row) =>
+      `${row.test_name ? `${row.test_name} ` : ''}element ${row.element_number}: ${row.missing || row.bridge || 'add the fact and the record paragraph that proves it'}`
+  );
 
-  checklist.push(
-    makeItem(
+  checklist.push({
+    ...makeItem(
       'elements_covered',
       'Each element of the confirmed test covered by our evidence',
       'High',
@@ -283,11 +312,125 @@ export function computeProspects({
       !gap
         ? 'No witness statement gap analysis has been run for this matter.'
         : `${coveredElements} covered, ${partlyElements} partly covered, ${notCoveredElements} not covered (${totalElements} element${totalElements === 1 ? '' : 's'}).`,
-      uncoveredElement
-        ? `Add facts on element ${uncoveredElement.element_number}${uncoveredElement.test_name ? ` of ${uncoveredElement.test_name}` : ''} to a supplementary statement.`
-        : 'Run the witness statement gap analysis, then add the missing facts to a supplementary statement.',
+      gapFixes.length > 0
+        ? `Cover each open element with a record paragraph or a new fact: ${gapFixes.join('; ')}.`
+        : uncoveredElement
+          ? `Add facts on element ${uncoveredElement.element_number}${uncoveredElement.test_name ? ` of ${uncoveredElement.test_name}` : ''} to a supplementary statement.`
+          : 'Run the witness statement gap analysis, then add the missing facts to a supplementary statement.',
       'Medium',
       'factlist'
+    ),
+    details: elementLines,
+  });
+
+  // 12. Promptness
+  const chronology = record ? buildChronology(record) : null;
+  const delay = chronology?.delay || null;
+  const delayExplanation = delay
+    ? (record?.segments || []).find(
+        (segment) =>
+          /(delay|late|out of time|prompt)/i.test(segment.text) &&
+          /(explain|reason|because|due to|could not|unable|advised)/i.test(segment.text) &&
+          !(segment.document_name === delay.order.document_name && segment.ref === delay.order.ref)
+      )
+    : null;
+
+  checklist.push({
+    ...makeItem(
+      'promptness',
+      'Promptness: the interval between the order and the application, and the explanation for it',
+      'High',
+      !delay ? 'No' : delay.flagged ? (delayExplanation ? 'Partly' : 'No') : 'Yes',
+      !delay
+        ? 'The record does not show both the date of the order and the date of the application, so the interval cannot be measured.'
+        : `${delay.note}${delayExplanation ? ` The record also says: “${String(delayExplanation.text).slice(0, 160)}” (${delayExplanation.document_name}, ${delayExplanation.ref}).` : ' No explanation for the interval is recorded.'}`,
+      !delay
+        ? 'Record the date of the order and the date of the application, each with its document and paragraph.'
+        : delay.flagged && !delayExplanation
+          ? `Explain the ${delay.days} days between ${delay.order.document_name}, ${delay.order.ref} and ${delay.application.document_name}, ${delay.application.ref}: add the reason with the record paragraph that proves it.`
+          : `Keep the explanation tied to the record: ${delayExplanation ? `${delayExplanation.document_name}, ${delayExplanation.ref}` : 'add the paragraph that explains the interval'}.`,
+      'Medium',
+      'question'
+    ),
+    details: (chronology?.entries || [])
+      .slice(0, 8)
+      .map((entry) => `${entry.stated_as || entry.date} — ${entry.quote.slice(0, 90)} (${entry.document_name}, ${entry.ref})`),
+  });
+
+  // 13. Known or knowable
+  const knowledgeSegments = (record?.segments || []).filter(
+    (segment) =>
+      /(knew|known|know|became aware|was aware|informed|notified|ought to have known)/i.test(segment.text) &&
+      /\b(19|20)\d{2}\b|\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(
+        segment.text
+      )
+  );
+  const knowledge = knowledgeSegments[0] || null;
+
+  checklist.push(
+    makeItem(
+      'knowable',
+      'Known or knowable: what the record shows about when each side knew or could have known the point',
+      'High',
+      knowledge ? 'Yes' : 'No',
+      knowledge
+        ? `The record dates that knowledge: “${String(knowledge.text).slice(0, 160)}” (${knowledge.document_name}, ${knowledge.ref}).`
+        : 'Nothing in the record dates when either side knew or could have known the point.',
+      knowledge
+        ? `Tie the answer to that paragraph (${knowledge.document_name}, ${knowledge.ref}) and to any later paragraph showing what changed.`
+        : 'Add the record paragraph that dates each side’s knowledge, or the new fact that does.',
+      'Medium',
+      'document'
+    )
+  );
+
+  // 14. Finality of the order challenged
+  const finalitySegment = (record?.segments || []).find((segment) =>
+    /(final (order|judgment|judgement|decision|determination)|final and conclusive|no right of appeal|conclusive)/i.test(
+      segment.text
+    )
+  );
+
+  checklist.push(
+    makeItem(
+      'finality',
+      'Finality: whether the order challenged is final, with the record reference',
+      'High',
+      finalitySegment ? 'Yes' : 'No',
+      finalitySegment
+        ? `The record shows the order treated as final: “${String(finalitySegment.text).slice(0, 160)}” (${finalitySegment.document_name}, ${finalitySegment.ref}).`
+        : 'Nothing in the record states that the order challenged is final.',
+      finalitySegment
+        ? `Cite ${finalitySegment.document_name}, ${finalitySegment.ref} wherever finality is relied on.`
+        : 'Show from the order, and the rule you rely on, that the order is final, and cite the paragraph.',
+      'Low',
+      'document'
+    )
+  );
+
+  // 15. Route relied on, and any other route the other side raises
+  const otherRoute = (record?.segments || []).find(
+    (segment) =>
+      segment.role === 'Other party' &&
+      /(appeal|permission to appeal|judicial review|set aside|vary|reconsider|review)/i.test(segment.text)
+  );
+
+  checklist.push(
+    makeItem(
+      'route',
+      'Route: the rule relied on, and any other route the other side raises, with record references',
+      'High',
+      !procedural?.route_confirmed ? 'No' : otherRoute ? 'Partly' : 'Yes',
+      !procedural?.route_confirmed
+        ? 'The route relied on has not been confirmed from the documents.'
+        : otherRoute
+          ? `The other side raise another route: “${String(otherRoute.text).slice(0, 160)}” (${otherRoute.document_name}, ${otherRoute.ref}).`
+          : 'The route relied on is confirmed and no other route is raised in the record.',
+      otherRoute
+        ? `Answer the other route raised at ${otherRoute.document_name}, ${otherRoute.ref}, and cite the rule relied on.`
+        : 'Confirm the rule relied on and cite it, with the record paragraph for the order challenged.',
+      'Medium',
+      'question'
     )
   );
 
@@ -333,6 +476,7 @@ export function computeProspects({
       effect: item.result === 'No' ? `Removes a ${item.priority.toLowerCase()} gap` : `Closes part of a ${item.priority.toLowerCase()} gap`,
       effort: item.effort,
       button: item.button,
+      button_label: item.button_label || '',
     }));
 
   const explanation = [
