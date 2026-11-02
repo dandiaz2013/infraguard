@@ -60,6 +60,42 @@
           }
         }
       }
+    },
+    "domain_id": {
+      "type": "string",
+      "description": "Taxonomy domain id"
+    },
+    "relationship_id": {
+      "type": "string",
+      "description": "Taxonomy relationship id"
+    },
+    "issue_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Selected taxonomy issue ids"
+    },
+    "answers": {
+      "type": "object",
+      "description": "Triage answers keyed by question id (Yes / No / Unsure)"
+    },
+    "merits_score": {
+      "type": "number",
+      "description": "Deterministic merits score 0-100"
+    },
+    "merits_band": {
+      "type": "string",
+      "description": "Poor / Speculative / Arguable / Strong"
+    },
+    "score_breakdown": {
+      "type": "object",
+      "description": "Points per triage question plus the case law adjustment"
+    },
+    "scored_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the score was last calculated"
     }
   },
   "required": [

@@ -1,0 +1,94 @@
+{
+  "name": "Judgment",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Judgment title"
+    },
+    "court": {
+      "type": "string",
+      "description": "Court that delivered the judgment"
+    },
+    "judgment_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the judgment"
+    },
+    "source_url": {
+      "type": "string",
+      "description": "Link to the judgment on a primary source"
+    },
+    "raw_text": {
+      "type": "string",
+      "description": "Full judgment text used by the parser"
+    },
+    "parse_status": {
+      "type": "string",
+      "enum": [
+        "unparsed",
+        "parsed",
+        "failed"
+      ],
+      "default": "unparsed",
+      "description": "Result of the last parse"
+    },
+    "parse_log": {
+      "type": "string",
+      "description": "Counts from the last parse"
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

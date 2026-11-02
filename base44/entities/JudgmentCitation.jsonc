@@ -1,0 +1,103 @@
+{
+  "name": "JudgmentCitation",
+  "type": "object",
+  "properties": {
+    "judgment_id": {
+      "type": "string",
+      "description": "Judgment this citation belongs to"
+    },
+    "case_law_id": {
+      "type": "string",
+      "description": "Authority cited"
+    },
+    "context_domain_id": {
+      "type": "string",
+      "description": "Taxonomy domain the citation is relevant to"
+    },
+    "context_issue_id": {
+      "type": "string",
+      "description": "Taxonomy issue the citation is relevant to"
+    },
+    "context_type": {
+      "type": "string",
+      "enum": [
+        "limitation",
+        "recovery",
+        "duty",
+        "procedure",
+        "causation",
+        "remedy",
+        "standard_of_review",
+        "other"
+      ],
+      "default": "other",
+      "description": "What the citation is used for"
+    },
+    "paragraph_ref": {
+      "type": "string",
+      "description": "Paragraph reference in the judgment"
+    },
+    "excerpt": {
+      "type": "string",
+      "description": "Text around the citation"
+    },
+    "note": {
+      "type": "string",
+      "description": "User note"
+    }
+  },
+  "required": [
+    "judgment_id",
+    "case_law_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "name": "CaseLaw",
+  "type": "object",
+  "properties": {
+    "neutral_citation": {
+      "type": "string",
+      "description": "Neutral citation, e.g. [2023] UKSC 12"
+    },
+    "name": {
+      "type": "string",
+      "description": "Case name, e.g. Smith v Jones"
+    },
+    "court": {
+      "type": "string",
+      "description": "Court that decided the case"
+    },
+    "year": {
+      "type": "number",
+      "description": "Year of the decision"
+    },
+    "report_reference": {
+      "type": "string",
+      "description": "Law report reference"
+    },
+    "url": {
+      "type": "string",
+      "description": "Link to the primary source"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short summary of the decision"
+    },
+    "principles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Legal principles established"
+    },
+    "verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Checked against a primary source by a user"
+    },
+    "source_note": {
+      "type": "string",
+      "description": "Where this record came from"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}
