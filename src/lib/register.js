@@ -3,7 +3,8 @@
 // question, how to resolve it, and the result. Deterministic throughout.
 import { normalise } from '@/lib/authorityCheck';
 import { LAW_KINDS, ROLE_LABELS, clip, datesIn, quoteInText } from '@/lib/recordIndex';
-import { keyTerms, searchRecord } from '@/lib/recordFirst';
+import { keyTerms } from '@/lib/recordFirst';
+import { findAnswer } from '@/lib/evidence';
 import { authorityLabel } from '@/lib/authorityNaming';
 
 const CUE =
@@ -72,58 +73,32 @@ function slug(value) {
   return normalise(value).replace(/\s+/g, '-').slice(0, 40) || 'item';
 }
 
-function judge(match, terms, answerRoles) {
-  if (answerRoles && !answerRoles.includes(match.role)) return null;
-  const norm = normalise(match.text);
-  const covered = terms.filter((term) => norm.includes(term.length >= 6 ? term.slice(0, 5) : term));
-  const coverage = terms.length ? covered.length / terms.length : 0;
-  const dates = datesIn(match.text);
-  const cue = CUE.test(match.text)
-    ? 'takes a position on it'
-    : dates.length
-      ? `gives the date ${dates[0]}`
-      : '';
-  const answers = Boolean(coverage >= 0.55 && cue && quoteInText(match.quote, match.text));
-  return {
-    answers,
-    coverage,
-    because: answers ? `answers because it covers ${covered.slice(0, 3).join(', ')} and ${cue}` : '',
-  };
-}
-
+// One answer, quoted from the paragraph that answers the question. A paragraph only
+// counts when the quoted sentence itself carries the point, so there are no generic
+// "the court considered" lines.
 export function recordAnswers(record, query, answerRoles) {
   const terms = keyTerms(query);
   const searched = (record?.documents || []).map((doc) => doc.name);
   if (!record || terms.length === 0) return { answering: [], searched, discarded: 0 };
 
-  const { matches } = searchRecord(record, query, 8);
-  const judged = matches
-    .map((match) => ({ match, verdict: judge(match, terms, answerRoles) }))
-    .filter((entry) => entry.verdict);
+  const minHits = Math.min(3, Math.max(1, Math.ceil(terms.length * 0.4)));
+  const found = findAnswer(record, { terms: terms.slice(0, 14), roles: answerRoles || null, minHits });
 
-  const answering = judged
-    .filter((entry) => entry.verdict.answers && entry.match.verified)
-    .slice(0, 3)
-    .map((entry) => ({
-      document_name: entry.match.document_name,
-      ref: entry.match.ref,
-      role: entry.match.role,
-      role_label: ROLE_LABELS[entry.match.role] || entry.match.role,
-      quote: clip(entry.match.quote, 320),
-      verified: true,
-      because: entry.verdict.because,
-    }));
+  const answering = found
+    ? [
+        {
+          document_name: found.document_name,
+          ref: found.ref,
+          role: found.role,
+          role_label: ROLE_LABELS[found.role] || found.role,
+          quote: clip(found.quote, 220),
+          verified: true,
+          because: `the quoted sentence answers it`,
+        },
+      ]
+    : [];
 
-  const candidates = matches
-    .filter((match) => match.verified)
-    .slice(0, 5)
-    .map((match) => ({
-      document_name: match.document_name,
-      ref: match.ref,
-      quote: clip(match.quote, 260),
-    }));
-
-  return { answering, candidates, searched, discarded: judged.length - answering.length };
+  return { answering, candidates: [], searched, discarded: found ? 0 : 1 };
 }
 
 function stepsFor(item) {

@@ -1,19 +1,15 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Loader2, Gauge, TrendingUp, TriangleAlert } from 'lucide-react';
-import ChecklistTable from '@/components/argument/ChecklistTable';
+import { SAFETY_FOOTER } from '@/lib/safety';
 
 const RATING_STYLE = {
   Weak: 'bg-red-100 text-red-900 border-red-300',
   Arguable: 'bg-amber-100 text-amber-900 border-amber-300',
-  Reasonable: 'bg-blue-100 text-blue-900 border-blue-300',
-  Strong: 'bg-green-100 text-green-900 border-green-300',
+  Strong: 'bg-green-100 text-green-900 border-green-300'
 };
-
-const DISCLAIMER =
-  'Indicative assessment of how well this argument is evidenced and supported. It is not a prediction of the court\'s decision and is not legal advice. Check every authority against the official judgment.';
 
 function SourceLine({ text }) {
   return <p className="text-[11px] text-slate-500 mt-0.5">{text}</p>;
@@ -36,8 +32,9 @@ function AssessmentList({ title, items, render }) {
   );
 }
 
-export default function ProspectsPanel({ prospects, assessment, isAssessing, onAssess, savedRating, history, canAssess }) {
-  const moved = savedRating && savedRating !== prospects.rating;
+// Prospects come from the seven gateway issues: the weakest issue sets the ceiling.
+export default function ProspectsPanel({ rating, explanation, issues = [], savedRating, history, assessment, isAssessing, onAssess, canAssess }) {
+  const moved = savedRating && savedRating !== rating;
 
   return (
     <Card className="shadow-md">
@@ -46,42 +43,48 @@ export default function ProspectsPanel({ prospects, assessment, isAssessing, onA
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Gauge className="h-5 w-5 text-slate-700" />
-              Stage B · Prospects of success
+              Prospects
             </CardTitle>
-            <CardDescription>Calculated from the checklist below, then a written assessment tied to your documents.</CardDescription>
+            <CardDescription>Set by the weakest of the seven gateway issues. Indicative only.</CardDescription>
           </div>
           <div className="text-right">
-            <Badge variant="outline" className={`text-sm px-3 py-1 ${RATING_STYLE[prospects.rating] || RATING_STYLE.Weak}`}>
-              {prospects.rating}
+            <Badge variant="outline" className={`text-sm px-3 py-1 ${RATING_STYLE[rating] || RATING_STYLE.Weak}`}>
+              {rating}
             </Badge>
             {moved && (
               <p className="mt-1 flex items-center justify-end gap-1 text-[11px] text-slate-600">
                 <TrendingUp className="h-3 w-3" />
-                Saved as {savedRating}, now {prospects.rating}
+                Saved as {savedRating}, now {rating}
               </p>
             )}
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5">
-        <p className="text-sm text-slate-700">{prospects.explanation}</p>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-slate-700">{explanation}</p>
 
         {history && history.length > 0 && (
           <p className="text-xs text-slate-500 border-t pt-2">
             <span className="font-semibold text-slate-700">Prospects history: </span>
             {history.map((entry) => `v${entry.version} ${entry.rating}`).join('  →  ')}
             {'  →  '}
-            <span className="font-medium text-slate-800">now {prospects.rating}</span>
+            <span className="font-medium text-slate-800">now {rating}</span>
           </p>
         )}
 
-        <ChecklistTable checklist={prospects.checklist} />
+        <div className="space-y-1 border-t pt-2">
+          {issues.map((issue) => (
+            <p key={issue.id} className="text-xs text-slate-700">
+              <span className="font-medium text-slate-900">{issue.number}. {issue.title}</span> — {issue.rating}: {issue.reason}
+            </p>
+          ))}
+        </div>
 
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
           <p className="flex items-start gap-2 text-xs text-amber-900">
             <TriangleAlert className="h-4 w-4 flex-shrink-0" />
-            {DISCLAIMER}
+            {SAFETY_FOOTER}
           </p>
         </div>
 
@@ -96,7 +99,8 @@ export default function ProspectsPanel({ prospects, assessment, isAssessing, onA
 
           {!assessment && !isAssessing && (
             <p className="text-xs text-slate-500 mt-2">
-              Uses only the argument, your documents, your points and the stored extracts. Anything it cannot support is shown as an open question.
+              Uses only the argument, your documents and the stored extracts. Anything it cannot support is shown as an
+              open question.
             </p>
           )}
 
@@ -121,13 +125,6 @@ export default function ProspectsPanel({ prospects, assessment, isAssessing, onA
               )}
 
               <AssessmentList title="Risks" items={assessment.risks} render={(item) => item.risk} />
-
-              {assessment.legal_test && (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Legal test</h4>
-                  <p className="text-xs text-slate-700 mt-0.5">{assessment.legal_test}</p>
-                </div>
-              )}
 
               {assessment.open_questions?.length > 0 && (
                 <div>

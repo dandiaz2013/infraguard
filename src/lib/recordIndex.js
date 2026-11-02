@@ -3,6 +3,8 @@
 // segments, and the dates, statutes, regulations, CPR rules and cases mentioned in
 // each segment are extracted with the exact sentence that mentions them.
 import { normalise } from '@/lib/authorityCheck';
+import { classifyDocument, roleForCategory } from '@/lib/documentType';
+import { dateFromDocument } from '@/lib/documentDate';
 
 export const RECORD_STATUSES = ['Filed or served', 'Draft', 'Reference only'];
 export const FILED_BY_OPTIONS = ['Ours', 'Other party', 'Court'];
@@ -14,7 +16,8 @@ export const ROLE_LABELS = {
   Unknown: 'Party not recorded',
 };
 
-const PARA_MARK = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.)]\s*|(\d{1,3})[.)]?\s{2,}(?=[A-Z(“]))/;
+const PARA_MARK =
+  /^\s*(?:\[(\d{1,3})\]|(\d{1,3})(?:\(([a-z0-9ivx]{1,4})\))?[.)]\s*|(\d{1,3})(?:\(([a-z0-9ivx]{1,4})\))?[.)]?\s{2,}(?=[A-Z(“]))/;
 const DECIMAL = /^\s*\d{1,3}\.\d/;
 const PAGE_MARK = /^\s*(?:page|p\.?)\s*(\d{1,3})\b/i;
 const MAX_SEGMENTS = 400;
@@ -63,28 +66,15 @@ export function yearsIn(text) {
   return [...new Set(found)];
 }
 
+// What a document is comes from the document itself. Only judgments, orders and
+// transcripts are the Court: a letter, a witness statement or an application is a party.
 export function roleOf(document = {}) {
-  const by = document.filed_by || '';
-  if (by === 'Court') return 'Court';
-  if (by === 'Other party') return 'Other party';
-  if (by === 'Ours') return 'Our side';
-
-  const category = document.category || '';
-  const name = `${document.name || document.file_name || ''} ${document.document_type || ''}`;
-
-  if (category === 'Judgments' || category === 'Orders' || category === 'Transcripts') return 'Court';
-  if (category === 'Witness statements') {
-    if (document.party === 'Other side') return 'Other party';
-    if (document.party === 'Court') return 'Court';
-    return 'Our side';
-  }
-  if (category === 'Application notices' || category === 'Skeleton arguments') return 'Our side';
-  if (category === 'Previous judgments and orders') return 'Court';
-  if (category === 'Our witness statement' || category === 'N244 and continuation sheet') return 'Our side';
-  if (category === 'Other party witness statement') return 'Other party';
-  if (/transcript|judgment|judgement|ruling|reasons|order\b/i.test(name)) return 'Court';
-  if (/skeleton/i.test(name)) return 'Unknown';
-  return 'Unknown';
+  const verdict = classifyDocument({
+    ...document,
+    name: document.name || document.file_name,
+    party: document.party || (document.filed_by === 'Other party' ? 'Other side' : '')
+  });
+  return roleForCategory(verdict.category, document.party || verdict.party);
 }
 
 function sentenceAt(text, index) {
@@ -125,7 +115,9 @@ function segmentize(text) {
     const marker = raw.match(PARA_MARK);
     if (marker) {
       sawParagraph = true;
-      current = { ref: `para ${Number(marker[1] || marker[2] || marker[3])}`, lines: [] };
+      const number = Number(marker[1] || marker[2] || marker[4]);
+      const sub = marker[3] || marker[5] || '';
+      current = { ref: `para ${number}${sub ? `(${sub})` : ''}`, lines: [] };
       const rest = raw.slice(marker[0].length).trim();
       if (rest) current.lines.push(rest);
       paragraphs.push(current);
@@ -171,37 +163,55 @@ function segmentize(text) {
     };
   }
 
+  // Letters and long unnumbered documents: split into real paragraphs, never one block.
   const chunks = String(text || '')
     .split(/\n\s*\n/)
     .map((chunk) => chunk.trim())
     .filter(Boolean);
 
-  const blocks = [];
-  chunks.forEach((chunk, index) => {
-    if (chunk.length <= 1500) {
-      blocks.push({ ref: `Section ${index + 1}`, text: chunk });
-      return;
-    }
-    const sentences = chunk.match(/[^.;:]+[.;:]+|[^.;:]+$/g) || [chunk];
+  let source = chunks;
+  if (source.length <= 1) {
+    const nonEmpty = lines.map((line) => line.trim()).filter(Boolean);
+    if (nonEmpty.length > 3) source = nonEmpty;
+  }
+  if (source.length <= 1 && String(text).trim().length > 400) {
+    const sentences = String(text).match(/[^.;:]+[.;:]+|[^.;:]+$/g) || [String(text)];
+    source = [];
     let buffer = '';
-    let part = 1;
     sentences.forEach((sentence) => {
-      if (buffer.length + sentence.length > 1200 && buffer) {
-        blocks.push({ ref: `Section ${index + 1}.${part}`, text: buffer });
+      if (buffer.length + sentence.length > 500 && buffer.trim()) {
+        source.push(buffer.trim());
         buffer = '';
-        part += 1;
       }
       buffer += sentence;
     });
-    if (buffer.trim()) blocks.push({ ref: `Section ${index + 1}.${part}`, text: buffer });
+    if (buffer.trim()) source.push(buffer.trim());
+  }
+
+  const blocks = [];
+  source.forEach((chunk) => {
+    if (chunk.length <= 900) {
+      blocks.push(chunk);
+      return;
+    }
+    const parts = chunk.match(/[^.;:]+[.;:]+|[^.;:]+$/g) || [chunk];
+    let buffer = '';
+    parts.forEach((sentence) => {
+      if (buffer.length + sentence.length > 700 && buffer.trim()) {
+        blocks.push(buffer.trim());
+        buffer = '';
+      }
+      buffer += sentence;
+    });
+    if (buffer.trim()) blocks.push(buffer.trim());
   });
 
   return {
     segments: blocks
-      .slice(0, MAX_SEGMENTS)
-      .map((block) => ({ ref: block.ref, text: block.text.replace(/\s+/g, ' ').trim() }))
-      .filter((block) => block.text.length > 1),
-    mode: 'section',
+      .map((block, index) => ({ ref: `para ${index + 1}`, text: block.replace(/\s+/g, ' ').trim() }))
+      .filter((block) => block.text.length > 1)
+      .slice(0, MAX_SEGMENTS),
+    mode: 'paragraph',
   };
 }
 
@@ -258,10 +268,14 @@ export function indexDocument(document = {}) {
     name: document.name || document.file_name || 'Document',
     text: document.text || '',
   };
-  doc.role = roleOf({ ...document, name: doc.name });
+  const verdict = classifyDocument({ ...document, name: doc.name, text: doc.text });
+  doc.category = verdict.category;
+  doc.party = verdict.party;
+  doc.role = roleForCategory(verdict.category, verdict.party);
   doc.record_status = document.record_status || 'Filed or served';
   doc.filed_by = document.filed_by || '';
-  doc.filed_date = document.filed_date || '';
+  doc.filed_date = document.document_date || document.filed_date || '';
+  doc.doc_date = doc.filed_date || dateFromDocument(doc.text, verdict.category);
   doc.exhibit_of = document.exhibit_of || '';
 
   const built = segmentize(doc.text);
@@ -285,9 +299,12 @@ export function indexDocument(document = {}) {
     name: doc.name,
     text: doc.text,
     role: doc.role,
+    category: doc.category,
+    party: doc.party,
     record_status: doc.record_status,
     filed_by: doc.filed_by,
     filed_date: doc.filed_date,
+    doc_date: doc.doc_date,
     exhibit_of: doc.exhibit_of,
     index_mode: built.mode,
     segments,
@@ -307,6 +324,7 @@ export function buildRecord(documents = []) {
       document_id: doc.id,
       document_name: doc.name,
       role: doc.role,
+      category: doc.category,
       record_status: doc.record_status,
       ref: segment.ref,
       text: segment.text,

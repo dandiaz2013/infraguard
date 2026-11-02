@@ -34,11 +34,28 @@ export default function QuestionCard({ question, index, onChange, onConvert, onA
         </p>
       )}
 
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={question.answer === 'Yes' ? 'default' : 'outline'}
+          onClick={() => onChange(index, { answer: 'Yes', status: 'Answered' })}
+        >
+          Yes
+        </Button>
+        <Button
+          size="sm"
+          variant={question.answer === 'No' ? 'default' : 'outline'}
+          onClick={() => onChange(index, { answer: 'No', status: 'Answered' })}
+        >
+          No
+        </Button>
+      </div>
+
       <Textarea
         value={question.answer || ''}
         onChange={(event) => onChange(index, { answer: event.target.value, status: event.target.value.trim() ? 'Answered' : 'Open' })}
-        placeholder="Your answer. Add the document and paragraph if you have them."
-        rows={3}
+        placeholder="Add the detail, with the document and paragraph if you have them."
+        rows={2}
         className="mt-2 text-sm"
       />
 

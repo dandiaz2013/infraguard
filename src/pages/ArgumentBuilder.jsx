@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -7,17 +7,19 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Scale, Loader2, Plus, Sparkles, Upload, X, FileText, CheckCircle, Link as LinkIcon } from 'lucide-react';
-import AICoach from '../components/AICoach';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Scale, Loader2, Plus, Sparkles, CheckCircle, Upload } from 'lucide-react';
+import AICoach from '@/components/AICoach';
 import QuestionStage from '@/components/argument/QuestionStage';
 import DraftBody from '@/components/argument/DraftBody';
 import AuthorityCheckPanel from '@/components/argument/AuthorityCheckPanel';
 import DocumentCheckPanel from '@/components/argument/DocumentCheckPanel';
 import ExtractNeededPanel from '@/components/argument/ExtractNeededPanel';
-import LegalTestsPanel from '@/components/argument/LegalTestsPanel';
-import ConfirmedTestsBanner from '@/components/argument/ConfirmedTestsBanner';
 import GapAnalysisPanel from '@/components/argument/GapAnalysisPanel';
 import CaseMaterialPanel from '@/components/argument/CaseMaterialPanel';
+import CaseBrief from '@/components/argument/CaseBrief';
+import GatewayPanel from '@/components/argument/GatewayPanel';
+import TestFromMainAuthority from '@/components/argument/TestFromMainAuthority';
 import ProspectsPanel from '@/components/argument/ProspectsPanel';
 import ImproveActions from '@/components/argument/ImproveActions';
 import { computeProspects } from '@/lib/prospectsChecklist';
@@ -29,7 +31,21 @@ import RegisterPanel from '@/components/argument/RegisterPanel';
 import useResolutionLoop from '@/hooks/useResolutionLoop';
 import { useNavigate } from 'react-router-dom';
 import fileToBase64 from '@/lib/fileToBase64';
-import { PARTY_TO_FILED_BY } from '@/lib/caseFile';
+import { toRecordDoc, PARTY_TO_FILED_BY } from '@/lib/caseFile';
+import { classifyDocument } from '@/lib/documentType';
+import { dateFromDocument } from '@/lib/documentDate';
+import { promptnessFor } from '@/lib/promptness';
+import { buildGateway, gatewayProspects } from '@/lib/gateway';
+import { buildCaseBrief } from '@/lib/caseBrief';
+import { SAFETY_FOOTER } from '@/lib/safety';
+
+const TABS = [
+  ['record', 'Record'],
+  ['gateway', 'Gateway'],
+  ['draft', 'Draft'],
+  ['checks', 'Checks'],
+  ['questions', 'Questions']
+];
 
 export default function ArgumentBuilder() {
   const initialMatter = new URLSearchParams(window.location.search).get('matter') || '';
@@ -45,13 +61,11 @@ export default function ArgumentBuilder() {
   const [position, setPosition] = useState('Claimant');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedArgument, setGeneratedArgument] = useState(null);
-  const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isCorrectingFacts, setIsCorrectingFacts] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [currentArgumentVersion, setCurrentArgumentVersion] = useState(null);
   const [isLoadingLastVersion, setIsLoadingLastVersion] = useState(false);
-  const [linkedDocuments, setLinkedDocuments] = useState({});
   const [questions, setQuestions] = useState([]);
   const [questionRound, setQuestionRound] = useState(0);
   const [isAsking, setIsAsking] = useState(false);
@@ -64,9 +78,11 @@ export default function ArgumentBuilder() {
   const [assessment, setAssessment] = useState(null);
   const [isAssessing, setIsAssessing] = useState(false);
   const [pendingProposals, setPendingProposals] = useState([]);
+  const [tab, setTab] = useState('record');
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const migrated = useRef('');
 
   const { data: matters = [] } = useQuery({
     queryKey: ['matters'],
@@ -76,8 +92,8 @@ export default function ArgumentBuilder() {
   const { data: currentMatter } = useQuery({
     queryKey: ['matter', selectedMatter],
     queryFn: async () => {
-      const matters = await base44.entities.Matter.filter({ id: selectedMatter });
-      return matters[0];
+      const rows = await base44.entities.Matter.filter({ id: selectedMatter });
+      return rows[0];
     },
     enabled: !!selectedMatter
   });
@@ -94,7 +110,7 @@ export default function ArgumentBuilder() {
     enabled: !!selectedMatter
   });
 
-  const { data: mainAuthorities = [] } = useQuery({
+  const { data: caseLaw = [] } = useQuery({
     queryKey: ['caseLaw'],
     queryFn: () => base44.entities.CaseLaw.list('-created_date')
   });
@@ -104,7 +120,7 @@ export default function ArgumentBuilder() {
     queryFn: () => base44.entities.AuthorityExtract.list('-added_date')
   });
 
-  // The record is read from the Case File Library only.
+  // The record is the Case File Library only.
   const { data: matterFiles = [] } = useQuery({
     queryKey: ['caseFileDocuments', selectedMatter],
     queryFn: async () => {
@@ -144,47 +160,6 @@ export default function ArgumentBuilder() {
     enabled: !!selectedMatter
   });
 
-  const latestGap = gapAnalyses[0] || null;
-  const confirmedTests = legalTests.filter((test) => test.status === 'Confirmed by user');
-
-  const documentPool = React.useMemo(
-    () => [
-      ...matterFiles.map((file) => ({ id: file.id, name: file.file_name, text: file.text || '' })),
-      ...uploadedDocuments.map((doc, index) => ({ id: `upload-${index + 1}`, name: doc.name, text: doc.content || '' })),
-    ],
-    [matterFiles, uploadedDocuments]
-  );
-
-  const mainAuthorityPool = React.useMemo(
-    () => dedupeAuthorities(mainAuthorities.filter((entry) => entry.is_main === true)).items,
-    [mainAuthorities]
-  );
-
-  const record = React.useMemo(
-    () =>
-      buildRecord([
-        ...matterFiles.map((file) => ({
-          id: file.id,
-          name: file.file_name,
-          text: file.text || '',
-          category: file.category,
-          record_status: file.record_status,
-          filed_by: PARTY_TO_FILED_BY[file.party] || file.filed_by,
-          filed_date: file.document_date || file.filed_date,
-          exhibit_of: file.exhibit_of
-        })),
-        ...uploadedDocuments.map((doc, index) => ({
-          id: `upload-${index + 1}`,
-          name: doc.name,
-          text: doc.content || '',
-          record_status: 'Draft'
-        }))
-      ]),
-    [matterFiles, uploadedDocuments]
-  );
-
-  const sweeps = React.useMemo(() => buildSweeps(record, ourPoints), [record, ourPoints]);
-
   const { data: argumentVersions = [] } = useQuery({
     queryKey: ['argumentVersions', selectedMatter],
     queryFn: async () => {
@@ -197,58 +172,115 @@ export default function ArgumentBuilder() {
     enabled: !!selectedMatter
   });
 
-  // Load last saved argument version when matter changes
-  React.useEffect(() => {
-    if (selectedMatter) {
-      loadLastArgumentVersion();
-    }
+  const latestGap = gapAnalyses[0] || null;
+  const mainAuthorityPool = useMemo(
+    () => dedupeAuthorities(caseLaw.filter((entry) => entry.is_main === true)).items,
+    [caseLaw]
+  );
+  const mainAuthorityId = procedural.main_authority_id || mainAuthorityPool[0]?.id || '';
+  const mainAuthority = mainAuthorityPool.find((record) => record.id === mainAuthorityId) || null;
+
+  const documentPool = useMemo(
+    () => matterFiles.map((file) => ({ id: file.id, name: file.file_name, text: file.text || '' })),
+    [matterFiles]
+  );
+
+  const record = useMemo(() => buildRecord(matterFiles.map(toRecordDoc)), [matterFiles]);
+  const sweeps = useMemo(() => buildSweeps(record, ourPoints), [record, ourPoints]);
+  const extracted = useMemo(
+    () =>
+      mainAuthorityId
+        ? authorityExtracts.filter((extract) => extract.case_law_id === mainAuthorityId)
+        : authorityExtracts.filter((extract) => mainAuthorityPool.some((entry) => entry.id === extract.case_law_id)),
+    [authorityExtracts, mainAuthorityId, mainAuthorityPool]
+  );
+
+  const promptness = useMemo(
+    () => promptnessFor({ record, orderId: procedural.order_document_id || '', extracts: extracted }),
+    [record, procedural.order_document_id, extracted]
+  );
+  const gateway = useMemo(
+    () => buildGateway({ record, extracts: extracted, promptness }),
+    [record, extracted, promptness]
+  );
+  const prospects = useMemo(() => gatewayProspects(gateway), [gateway]);
+  const dismissedDocs = procedural.dismissed_documents || [];
+  const brief = useMemo(
+    () => buildCaseBrief({ matter: currentMatter, gateway, promptness, missingDocs, dismissed: dismissedDocs, ourPoints }),
+    [currentMatter, gateway, promptness, missingDocs, dismissedDocs, ourPoints]
+  );
+
+  const confirmedTests = legalTests.filter(
+    (test) =>
+      test.status === 'Confirmed by user' &&
+      test.usage !== 'Background: tests applied in the earlier decision' &&
+      (!mainAuthorityId || test.source_case_law_id === mainAuthorityId)
+  );
+
+  // Load the last saved version when the matter changes.
+  useEffect(() => {
+    if (selectedMatter) loadLastArgumentVersion();
   }, [selectedMatter]);
 
-  // Auto-populate fact pattern when matter changes (if no saved version)
-  React.useEffect(() => {
-    if (currentMatter && !currentArgumentVersion) {
-      setFactPattern(currentMatter.description || '');
-    }
+  useEffect(() => {
+    if (currentMatter && !currentArgumentVersion) setFactPattern(currentMatter.description || '');
   }, [currentMatter, currentArgumentVersion]);
 
-  // Detect unsaved changes
-  React.useEffect(() => {
-    if (generatedArgument) {
-      setHasUnsavedChanges(true);
-    }
+  useEffect(() => {
+    if (generatedArgument) setHasUnsavedChanges(true);
   }, [generatedArgument]);
 
-  // Block navigation on unsaved changes
-  React.useEffect(() => {
-    const handleBeforeUnload = (e) => {
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
       if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = 'You have unsaved legal work. Are you sure you want to leave?';
-        return e.returnValue;
+        event.preventDefault();
+        event.returnValue = 'You have unsaved legal work. Are you sure you want to leave?';
+        return event.returnValue;
       }
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  // Tests confirmed from a judgment in the file are background, not tests for this application.
+  useEffect(() => {
+    if (!selectedMatter || !mainAuthorityId || legalTests.length === 0) return;
+    const key = `${selectedMatter}:${mainAuthorityId}`;
+    if (migrated.current === key) return;
+    const challengedNames = matterFiles
+      .filter((file) => file.category === 'Judgments' || file.category === 'Orders')
+      .map((file) => String(file.file_name || '').toLowerCase());
+    const fromChallenged = (test) =>
+      (test.elements || []).some(
+        (element) =>
+          element.source_document_name &&
+          challengedNames.includes(String(element.source_document_name).toLowerCase())
+      );
+    const strays = legalTests.filter(
+      (test) =>
+        test.status === 'Confirmed by user' &&
+        test.usage !== 'Background: tests applied in the earlier decision' &&
+        (test.source_case_law_id !== mainAuthorityId || fromChallenged(test))
+    );
+    migrated.current = key;
+    if (strays.length === 0) return;
+    Promise.all(
+      strays.map((test) =>
+        base44.entities.LegalTest.update(test.id, { usage: 'Background: tests applied in the earlier decision' })
+      )
+    ).then(() => queryClient.invalidateQueries({ queryKey: ['legalTests', selectedMatter] }));
+  }, [selectedMatter, mainAuthorityId, legalTests, matterFiles]);
+
   const loadLastArgumentVersion = async () => {
     if (!selectedMatter) return;
-
     setIsLoadingLastVersion(true);
     try {
-      const savedArguments = await base44.entities.Argument.filter(
-        { matter_id: selectedMatter },
-        '-version_number',
-        1
-      );
-
-      if (savedArguments.length > 0) {
-        const lastVersion = savedArguments[0];
+      const saved = await base44.entities.Argument.filter({ matter_id: selectedMatter }, '-version_number', 1);
+      if (saved.length > 0) {
+        const lastVersion = saved[0];
         setCurrentArgumentVersion(lastVersion);
         setFactPattern(lastVersion.fact_pattern || '');
         setPosition(lastVersion.position);
-        
         if (lastVersion.fact_expansions) {
           setChronology(lastVersion.fact_expansions.chronology || '');
           setDisputedFacts(lastVersion.fact_expansions.disputed_facts || '');
@@ -257,11 +289,7 @@ export default function ArgumentBuilder() {
           setProceduralHistory(lastVersion.fact_expansions.procedural_history || '');
           setLossHarmRisk(lastVersion.fact_expansions.loss_harm_risk || '');
         }
-
-        if (lastVersion.argument_text) {
-          setGeneratedArgument({ full_argument_markdown: lastVersion.argument_text });
-        }
-
+        if (lastVersion.argument_text) setGeneratedArgument({ full_argument_markdown: lastVersion.argument_text });
         setQuestions(lastVersion.questions || []);
         setQuestionRound(lastVersion.question_round || 0);
         setOurPoints(lastVersion.our_points || []);
@@ -269,7 +297,6 @@ export default function ArgumentBuilder() {
         setMisstatements(lastVersion.misstatements || []);
         setProcedural(lastVersion.procedural || {});
         setAssessment(lastVersion.prospects?.assessment || null);
-
         setHasUnsavedChanges(false);
       }
     } catch (error) {
@@ -279,30 +306,27 @@ export default function ArgumentBuilder() {
     }
   };
 
-  const handleFileUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
+  // Uploads go into the Case File Library, classified from the document itself.
+  const handleFileUpload = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0 || !selectedMatter) return;
     setIsUploading(true);
     try {
       for (const file of files) {
         const fileBase64 = await fileToBase64(file);
-
         const extractResponse = await base44.functions.invoke('documentTextExtract', {
           fileName: file.name,
           fileBase64
         });
-
         if (extractResponse.data?.error) throw new Error(extractResponse.data.error);
         const text = extractResponse.data?.text || '';
-
-        // Uploads go straight into the Case File Library, which is the record.
+        const verdict = classifyDocument({ file_name: file.name, text });
         await base44.entities.CaseFileDocument.create({
           matter_id: selectedMatter,
           file_name: file.name,
-          category: 'Other',
-          party: 'Ours',
-          document_date: new Date().toISOString().slice(0, 10),
+          category: verdict.category,
+          party: verdict.party,
+          document_date: dateFromDocument(text, verdict.category),
           record_status: 'Filed or served',
           file_uri: extractResponse.data?.file_uri || '',
           text: text.slice(0, 120000),
@@ -311,48 +335,36 @@ export default function ArgumentBuilder() {
           source: 'Argument Builder upload'
         });
       }
-
       queryClient.invalidateQueries({ queryKey: ['caseFileDocuments', selectedMatter] });
     } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to upload documents');
+      alert(`Failed to upload documents: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
-  const removeDocument = (index) => {
-    const newDocs = uploadedDocuments.filter((_, i) => i !== index);
-    setUploadedDocuments(newDocs);
-    // Remove any links to this document
-    const newLinked = { ...linkedDocuments };
-    Object.keys(newLinked).forEach(key => {
-      newLinked[key] = newLinked[key].filter((_, i) => i !== index);
-    });
-    setLinkedDocuments(newLinked);
+  const handleRecordChange = async (id, patch) => {
+    if (!id) return;
+    await base44.entities.CaseFileDocument.update(id, patch);
+    queryClient.invalidateQueries({ queryKey: ['caseFileDocuments', selectedMatter] });
   };
 
-  const linkDocumentToPoint = (docIndex, pointType) => {
-    setLinkedDocuments(prev => ({
+  const setOrder = (orderDocumentId) =>
+    setProcedural((prev) => ({ ...prev, order_document_id: orderDocumentId }));
+
+  const setMainAuthority = (id) => setProcedural((prev) => ({ ...prev, main_authority_id: id }));
+
+  const dismissDoc = (docId) =>
+    setProcedural((prev) => ({
       ...prev,
-      [pointType]: [...(prev[pointType] || []), docIndex]
+      dismissed_documents: [...(prev.dismissed_documents || []), docId]
     }));
-  };
-
-  const saveArgumentMutation = useMutation({
-    mutationFn: (data) => base44.entities.Argument.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['arguments']);
-      alert('Argument saved successfully!');
-    }
-  });
 
   const handleGenerate = async () => {
     if (!factPattern.trim() || !selectedMatter) {
       alert('Please select a matter and provide facts');
       return;
     }
-
     if (!currentMatter?.court) {
       alert('ERROR: Matter must have a Court specified. Please update Matter details.');
       return;
@@ -360,7 +372,6 @@ export default function ArgumentBuilder() {
 
     setIsGenerating(true);
     setGeneratedArgument(null);
-
     try {
       const response = await base44.functions.invoke('legalArgumentDraft', {
         position,
@@ -368,7 +379,7 @@ export default function ArgumentBuilder() {
         matterName: currentMatter.matter_name,
         matterType: currentMatter.matter_type,
         factPattern,
-        issueTitle: selectedIssue ? (issues.find(i => i.id === selectedIssue)?.issue_title || '') : '',
+        issueTitle: selectedIssue ? issues.find((entry) => entry.id === selectedIssue)?.issue_title || '' : '',
         expansions: {
           chronology,
           disputed_facts: disputedFacts,
@@ -377,28 +388,46 @@ export default function ArgumentBuilder() {
           procedural_history: proceduralHistory,
           loss_harm_risk: lossHarmRisk
         },
-        authorities: authorities.map(a => ({
-          title: a.title,
-          citation: a.citation,
-          legal_principle: a.legal_principle,
-          status: a.tags?.find(t => ['Active', 'Overruled'].includes(t)) || 'Active'
+        authorities: authorities.map((entry) => ({
+          title: entry.title,
+          citation: entry.citation,
+          legal_principle: entry.legal_principle,
+          status: entry.tags?.find((tag) => ['Active', 'Overruled'].includes(tag)) || 'Active'
         })),
-        main_authorities: mainAuthorityPool.map((record) => ({
-          name: record.name,
-          citation: record.neutral_citation || '',
-          court: record.court || '',
-          year: record.year || null,
-          official_url: record.official_url || record.url || '',
-          checked: record.check_status === 'Extract checked against official text',
-          extracts: authorityExtracts
-            .filter((extract) => extract.case_law_id === record.id)
-            .map((extract) => ({
-              paragraph_ref: extract.paragraph_ref,
-              extract_text: extract.extract_text,
-              proposition: extract.proposition || '',
-              status: extract.status || '',
-            }))
+        main_authorities: mainAuthorityPool
+          .filter((entry) => !mainAuthorityId || entry.id === mainAuthorityId)
+          .map((entry) => ({
+            name: entry.name,
+            citation: entry.neutral_citation || '',
+            court: entry.court || '',
+            year: entry.year || null,
+            official_url: entry.official_url || entry.url || '',
+            checked: entry.check_status === 'Extract checked against official text',
+            extracts: authorityExtracts
+              .filter((extract) => extract.case_law_id === entry.id)
+              .map((extract) => ({
+                paragraph_ref: extract.paragraph_ref,
+                extract_text: extract.extract_text,
+                proposition: extract.proposition || '',
+                status: extract.status || ''
+              }))
+          })),
+        gateway: gateway.map((issue) => ({
+          number: issue.number,
+          title: issue.title,
+          ask: issue.ask,
+          rating: issue.rating,
+          rating_reason: issue.reason,
+          our_answer: issue.ours
+            ? { quote: issue.ours.quote, document_name: issue.ours.document_name, ref: issue.ours.ref }
+            : null,
+          their_answer: issue.theirs
+            ? { quote: issue.theirs.quote, document_name: issue.theirs.document_name, ref: issue.theirs.ref }
+            : null,
+          gap: issue.gap,
+          next_step: issue.next
         })),
+        promptness_note: promptness.note,
         question_answers: questions
           .filter((question) => (question.answer || '').trim() || question.status)
           .map((question) => ({
@@ -414,39 +443,26 @@ export default function ArgumentBuilder() {
         misstatements,
         legal_tests: confirmedTests.map((test) => ({
           name: test.name,
-          source_name: mainAuthorities.find((record) => record.id === test.source_case_law_id)?.name || '',
+          source_name: mainAuthority?.name || '',
           elements: (test.elements || []).map((element) => ({
             text: element.text,
-            source_document_name: element.source_document_name || '',
-            source_paragraph_ref: element.source_paragraph_ref || '',
-            source_extract_ref: element.source_extract_id
-              ? (authorityExtracts.find((extract) => extract.id === element.source_extract_id)?.paragraph_ref || 'stored extract')
-              : ''
+            source_paragraph_ref: element.source_paragraph_ref || ''
           }))
         })),
-        documents: [
-          ...matterFiles.map((file) => ({
-            id: file.id,
-            name: file.file_name,
-            content: file.text || '',
-            filed_by: PARTY_TO_FILED_BY[file.party] || file.filed_by || '',
-            record_status: file.record_status || 'Filed or served'
-          })),
-          ...uploadedDocuments.map((doc, idx) => ({
-            id: `upload-${idx + 1}`,
-            name: doc.name,
-            content: doc.content,
-            linked_to: Object.entries(linkedDocuments)
-              .filter(([, docs]) => docs.includes(idx))
-              .map(([point]) => point)
-          }))
-        ]
+        documents: matterFiles.map((file) => ({
+          id: file.id,
+          name: file.file_name,
+          content: file.text || '',
+          filed_by: PARTY_TO_FILED_BY[file.party] || file.filed_by || '',
+          category: file.category || '',
+          record_status: file.record_status || 'Filed or served'
+        }))
       });
 
       setGeneratedArgument({ full_argument_markdown: response.data.argument });
       setDraftChanges(compareNewDraft(response.data.argument));
+      setTab('draft');
     } catch (error) {
-      console.error('Generation error:', error);
       alert(`Argument generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
@@ -458,39 +474,34 @@ export default function ArgumentBuilder() {
       alert('Generate an argument first');
       return;
     }
-
     setIsCorrectingFacts(true);
     try {
       const response = await base44.functions.invoke('legalArgumentFactCheck', {
         argument: generatedArgument.full_argument_markdown,
         factPattern
       });
-
       setGeneratedArgument({ full_argument_markdown: response.data.argument });
-      alert('Facts reviewed and corrected');
     } catch (error) {
-      console.error('Correction error:', error);
       alert('Failed to correct facts');
     } finally {
       setIsCorrectingFacts(false);
     }
   };
 
-  const prospects = computeProspects({
+  const checklistProspects = computeProspects({
     text: generatedArgument?.full_argument_markdown || '',
     questions,
     ourPoints,
     clauses,
     misstatements,
     procedural,
-    caseLaw: mainAuthorities,
+    caseLaw,
     extracts: authorityExtracts,
     legalTests,
     gap: latestGap,
     record
   });
 
-  const checklistKey = prospects.checklist.map((item) => `${item.id}:${item.result}`).join('|');
   const {
     register,
     chronology: chronologyData,
@@ -506,8 +517,8 @@ export default function ArgumentBuilder() {
   } = useResolutionLoop({
     matterId: selectedMatter,
     record,
-    checklistKey,
-    checklist: prospects.checklist,
+    checklistKey: checklistProspects.checklist.map((item) => `${item.id}:${item.result}`).join('|'),
+    checklist: checklistProspects.checklist,
     legalTests,
     registerAnswers,
     undisputedFacts,
@@ -519,31 +530,14 @@ export default function ArgumentBuilder() {
     setGeneratedArgument
   });
 
-  // A checklist item is met once a verified record quotation answers it.
-  const prospectsView = React.useMemo(() => {
-    const checklist = prospects.checklist.map((item) => {
-      const proof = register.items.find((entry) => entry.id === `check-${item.id}`)?.evidence?.[0];
-      if (!proof || item.result === 'Yes') return item;
-      return {
-        ...item,
-        result: 'Yes',
-        reason: `${item.reason ? `${item.reason} ` : ''}Verified in the record: ${proof.document_name}, ${proof.ref}.`
-      };
-    });
-    return { ...prospects, checklist };
-  }, [checklistKey, register]);
-
-  const openUpload = () => document.getElementById('documents')?.click();
-
   const prospectsHistory = argumentVersions
-    .filter((record) => record.prospects?.rating)
+    .filter((entry) => entry.prospects?.rating)
     .slice()
     .sort((a, b) => (a.version_number || 0) - (b.version_number || 0))
-    .map((record) => ({ version: record.version_number, rating: record.prospects.rating }));
+    .map((entry) => ({ version: entry.version_number, rating: entry.prospects.rating }));
 
-  const updateQuestion = (index, patch) => {
+  const updateQuestion = (index, patch) =>
     setQuestions((prev) => prev.map((question, position) => (position === index ? { ...question, ...patch } : question)));
-  };
 
   const questionPayload = () => ({
     matter_id: selectedMatter,
@@ -566,22 +560,14 @@ export default function ArgumentBuilder() {
     };
   };
 
-  const handleRecordChange = async (id, patch) => {
-    if (String(id).startsWith('upload-')) return;
-    await base44.entities.CaseFileDocument.update(id, patch);
-    queryClient.invalidateQueries({ queryKey: ['caseFileDocuments', selectedMatter] });
-  };
-
+  // At most five questions, yes or no first.
   const handleAskQuestions = async () => {
-    if (!selectedMatter) {
-      alert('Select a matter first');
-      return;
-    }
+    if (!selectedMatter) return;
     setIsAsking(true);
     try {
       const response = await base44.functions.invoke('argumentQuestions', { ...questionPayload(), mode: 'questions' });
       if (response.data?.error) throw new Error(response.data.error);
-      const asked = (response.data.questions || []).map((question) => ({
+      const asked = (response.data.questions || []).slice(0, 5).map((question) => ({
         ...question,
         answer: '',
         quote: '',
@@ -602,7 +588,7 @@ export default function ArgumentBuilder() {
   };
 
   const handleFollowUp = async () => {
-    if (!selectedMatter || questionRound >= 3) return;
+    if (!selectedMatter || questions.length >= 5) return;
     setIsAsking(true);
     try {
       const nextRound = questionRound + 1;
@@ -613,7 +599,8 @@ export default function ArgumentBuilder() {
         questions
       });
       if (response.data?.error) throw new Error(response.data.error);
-      const asked = (response.data.questions || []).map((question) => ({
+      const room = Math.max(0, 5 - questions.length);
+      const asked = (response.data.questions || []).slice(0, room).map((question) => ({
         ...question,
         answer: '',
         quote: '',
@@ -634,15 +621,11 @@ export default function ArgumentBuilder() {
   };
 
   const handleCheckConflicts = async () => {
-    const answered = questions
-      .map((question, index) => ({ ...question, index }))
-      .filter((question) => (question.answer || '').trim());
-
+    const answered = questions.map((question, index) => ({ ...question, index })).filter((question) => (question.answer || '').trim());
     if (answered.length === 0) {
       alert('Answer at least one question first');
       return;
     }
-
     setConflictBusy(true);
     try {
       const response = await base44.functions.invoke('argumentQuestions', {
@@ -720,7 +703,7 @@ export default function ArgumentBuilder() {
         matter_id: selectedMatter,
         position,
         argument_text: generatedArgument.full_argument_markdown,
-        checklist: prospectsView.checklist,
+        checklist: checklistProspects.checklist,
         our_points: ourPoints,
         contract_clauses: clauses,
         misstatements
@@ -736,23 +719,16 @@ export default function ArgumentBuilder() {
 
   const handleImproveAction = (type) => {
     if (type === 'document') {
-      document.getElementById('documents')?.click();
+      setTab('record');
+      setTimeout(() => document.getElementById('documents')?.click(), 100);
     } else if (type === 'authority') {
       navigate('/CaseLawLibrary');
-    } else if (type === 'point') {
-      document.getElementById('material-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      document.getElementById('point-input')?.focus();
-    } else if (type === 'clause') {
-      document.getElementById('material-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      document.getElementById('clause-reference')?.focus();
-    } else if (type === 'find_test') {
-      document.getElementById('find-test')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else if (type === 'test') {
-      document.getElementById('legal-tests')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (type === 'find_test' || type === 'test') {
+      setTab('gateway');
     } else if (type === 'factlist') {
-      document.getElementById('gap-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTab('checks');
     } else {
-      document.getElementById('question-stage')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTab('questions');
     }
   };
 
@@ -761,16 +737,14 @@ export default function ArgumentBuilder() {
       alert('Please generate an argument first');
       return;
     }
-
     const firstLine = generatedArgument.full_argument_markdown?.split('\n')[0] || 'Legal Argument';
     const nextVersion = currentArgumentVersion ? currentArgumentVersion.version_number + 1 : 1;
-
     try {
       await base44.entities.Argument.create({
         matter_id: selectedMatter,
         version_number: nextVersion,
         argument_title: firstLine.replace(/^#+ /, '').substring(0, 100),
-        position: position,
+        position,
         court: currentMatter.court,
         jurisdiction: 'UK',
         fact_pattern: factPattern,
@@ -783,516 +757,387 @@ export default function ArgumentBuilder() {
           loss_harm_risk: lossHarmRisk
         },
         argument_text: generatedArgument.full_argument_markdown,
-        authorities: authorities.map(a => a.id),
+        authorities: authorities.map((entry) => entry.id),
         our_points: ourPoints,
         contract_clauses: clauses,
         misstatements,
         procedural,
         questions,
         question_round: questionRound,
-        prospects: { ...prospectsView, ...(assessment ? { assessment } : {}), generated_at: new Date().toISOString() },
+        prospects: {
+          rating: prospects.rating,
+          explanation: prospects.explanation,
+          issues: gateway.map((issue) => ({
+            id: issue.id,
+            number: issue.number,
+            title: issue.title,
+            rating: issue.rating,
+            reason: issue.reason
+          })),
+          ...(assessment ? { assessment } : {}),
+          generated_at: new Date().toISOString()
+        },
         status: 'Draft',
         parent_version_id: currentArgumentVersion?.id
       });
-
       setHasUnsavedChanges(false);
       queryClient.invalidateQueries(['arguments']);
       await loadLastArgumentVersion();
       alert(`Argument saved as Version ${nextVersion}`);
     } catch (error) {
-      console.error('Save error:', error);
       alert('Failed to save argument');
     }
   };
 
+  const openRecordAt = () => {
+    setTab('record');
+    setTimeout(() => document.getElementById('record-documents')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">⚖️ JurisAI Argument Builder</h1>
-          <p className="text-slate-600">Versioned legal arguments with court-level enforcement</p>
-          {isLoadingLastVersion && (
-            <p className="text-xs text-blue-600 mt-2">Loading last saved version...</p>
-          )}
-        </div>
-
-        {selectedMatter && (
-          <div className="mb-6">
-            <ConfirmedTestsBanner tests={legalTests} />
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+              <Scale className="h-6 w-6 text-slate-700" />
+              Argument Builder
+            </h1>
+            <p className="text-sm text-slate-600">One screen, seven gateway issues, everything taken from the record.</p>
           </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Input Panel */}
-          <Card className="shadow-md border-l-4 border-l-blue-600">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Scale className="h-5 w-5 text-blue-600" />
-                  Argument Configuration
-                  {currentArgumentVersion && (
-                    <Badge variant="outline" className="ml-2">
-                      v{currentArgumentVersion.version_number}
-                    </Badge>
-                  )}
-                </CardTitle>
-                {hasUnsavedChanges && (
-                  <Badge variant="destructive" className="animate-pulse">
-                    Unsaved Changes
-                  </Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4 max-h-[750px] overflow-y-auto">
-              <div>
-                <Label htmlFor="matter">Matter *</Label>
-                <Select value={selectedMatter} onValueChange={(v) => {
-                  setSelectedMatter(v);
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <Label className="text-[11px]">Matter</Label>
+              <Select
+                value={selectedMatter}
+                onValueChange={(value) => {
+                  setSelectedMatter(value);
                   setSelectedIssue('');
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select matter..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {matters.map((matter) => (
-                      <SelectItem key={matter.id} value={matter.id}>
-                        {matter.matter_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="position">Position *</Label>
-                <Select value={position} onValueChange={setPosition}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Claimant">Claimant</SelectItem>
-                    <SelectItem value="Defendant">Defendant</SelectItem>
-                    <SelectItem value="Appellant">Appellant</SelectItem>
-                    <SelectItem value="Respondent">Respondent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {currentMatter && (
-                <div className="bg-slate-100 border border-slate-300 rounded-lg p-4 space-y-2">
-                  <h3 className="text-sm font-semibold text-slate-900">📋 Matter Overview (Read Only)</h3>
-                  <div className="text-xs text-slate-700 space-y-1">
-                    <p><span className="font-medium">Matter:</span> {currentMatter.matter_name}</p>
-                    <p><span className="font-medium">Client:</span> {currentMatter.client_name}</p>
-                    {currentMatter.court ? (
-                      <p className="bg-amber-100 border border-amber-300 rounded px-2 py-1">
-                        <span className="font-bold">🔒 Court (LOCKED):</span> {currentMatter.court}
-                      </p>
-                    ) : (
-                      <p className="bg-red-100 border border-red-300 rounded px-2 py-1 text-red-900">
-                        ⚠️ Court NOT SET - Update Matter first
-                      </p>
-                    )}
-                    <p><span className="font-medium">Type:</span> {currentMatter.matter_type}</p>
-                    <p><span className="font-medium">Status:</span> {currentMatter.status}</p>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <Label htmlFor="facts">Core Fact Pattern (Auto-Populated) *</Label>
-                <Textarea
-                  id="facts"
-                  placeholder="This auto-populates from Matter. Edit as needed."
-                  value={factPattern}
-                  onChange={(e) => setFactPattern(e.target.value)}
-                  rows={5}
-                  className="text-sm bg-slate-50"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="documents">📎 Upload Documents (Optional)</Label>
-                <div className="mt-2 space-y-2">
-                  <input
-                    id="documents"
-                    type="file"
-                    multiple
-                    accept=".pdf,.txt,.doc,.docx"
-                    onChange={handleFileUpload}
-                    disabled={isUploading}
-                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  {isUploading && (
-                    <p className="text-xs text-slate-500">Uploading and processing...</p>
-                  )}
-                  {uploadedDocuments.length > 0 && (
-                    <div className="space-y-2">
-                      {uploadedDocuments.map((doc, idx) => (
-                        <div key={idx} className="bg-green-50 border border-green-200 rounded p-2">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-green-700" />
-                              <span className="text-xs text-green-900">{doc.name}</span>
-                            </div>
-                            <button onClick={() => removeDocument(idx)} className="text-green-700 hover:text-green-900">
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            <button 
-                              onClick={() => linkDocumentToPoint(idx, 'chronology')}
-                              className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                            >
-                              <LinkIcon className="h-2 w-2 inline mr-1" />
-                              Chronology
-                            </button>
-                            <button 
-                              onClick={() => linkDocumentToPoint(idx, 'disputed_facts')}
-                              className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                            >
-                              <LinkIcon className="h-2 w-2 inline mr-1" />
-                              Disputed
-                            </button>
-                            <button 
-                              onClick={() => linkDocumentToPoint(idx, 'evidence')}
-                              className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-                            >
-                              <LinkIcon className="h-2 w-2 inline mr-1" />
-                              Evidence
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t pt-4 space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900">📝 Fact Pattern Expansion (Optional)</h3>
-                
-                <div>
-                  <Label htmlFor="chronology" className="text-xs">Chronology (Key Events)</Label>
-                  <Textarea
-                    id="chronology"
-                    placeholder="- Event 1&#10;- Event 2"
-                    value={chronology}
-                    onChange={(e) => setChronology(e.target.value)}
-                    rows={3}
-                    className="text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="disputed" className="text-xs">Disputed Facts</Label>
-                  <Textarea
-                    id="disputed"
-                    placeholder="Facts contested by parties..."
-                    value={disputedFacts}
-                    onChange={(e) => setDisputedFacts(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="undisputed" className="text-xs">Undisputed Facts</Label>
-                  <Textarea
-                    id="undisputed"
-                    placeholder="Facts agreed by all parties..."
-                    value={undisputedFacts}
-                    onChange={(e) => setUndisputedFacts(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="legal_issues" className="text-xs">Legal Issues Raised</Label>
-                  <Textarea
-                    id="legal_issues"
-                    placeholder="Key legal questions..."
-                    value={legalIssuesRaised}
-                    onChange={(e) => setLegalIssuesRaised(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="procedural" className="text-xs">Procedural History</Label>
-                  <Textarea
-                    id="procedural"
-                    placeholder="Previous hearings, orders..."
-                    value={proceduralHistory}
-                    onChange={(e) => setProceduralHistory(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="loss" className="text-xs">Loss, Harm, or Risk</Label>
-                  <Textarea
-                    id="loss"
-                    placeholder="Damages, injury, harm..."
-                    value={lossHarmRisk}
-                    onChange={(e) => setLossHarmRisk(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-              </div>
-
-              {selectedMatter && authorities.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm text-green-900 font-medium">
-                    ✓ {authorities.length} legal {authorities.length === 1 ? 'authority' : 'authorities'} will be incorporated
-                  </p>
-                </div>
-              )}
-
-              {mainAuthorityPool.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-sm text-amber-900 font-medium">
-                    ✓ {mainAuthorityPool.length} main {mainAuthorityPool.length === 1 ? 'authority' : 'authorities'} cited first, quotable only from {authorityExtracts.length} stored extract{authorityExtracts.length === 1 ? '' : 's'}
-                  </p>
-                </div>
-              )}
-
-              <Button
-                onClick={handleGenerate}
-                disabled={isGenerating || !factPattern.trim() || !selectedMatter}
-                className="w-full bg-blue-600 hover:bg-blue-700"
-                size="lg"
+                }}
               >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Generating Argument...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-5 w-5 mr-2" />
-                    Generate Argument
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* AI Coach Panel */}
-          <AICoach
-            factPattern={factPattern}
-            generatedArgument={generatedArgument}
-            currentMatter={currentMatter}
-            authorities={authorities}
-            position={position}
-            extracts={authorityExtracts
-              .filter((extract) => mainAuthorityPool.some((record) => record.id === extract.case_law_id))
-              .map((extract) => ({
-                authority: mainAuthorityPool.find((record) => record.id === extract.case_law_id)?.name || '',
-                citation: mainAuthorityPool.find((record) => record.id === extract.case_law_id)?.neutral_citation || '',
-                paragraph_ref: extract.paragraph_ref || '',
-                exact_text: extract.extract_text || '',
-                proposition: extract.proposition || '',
-                status:
-                  extract.status ||
-                  (mainAuthorityPool.find((record) => record.id === extract.case_law_id)?.check_status ===
-                  'Extract checked against official text'
-                    ? 'Extract checked against official text'
-                    : 'Proposed - compare with the official text'),
-              }))}
-          />
-
-          {/* Results Panel */}
-          <Card className="shadow-md">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Generated Argument</CardTitle>
-                {generatedArgument && (
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={handleCorrectFacts} disabled={isCorrectingFacts}>
-                      {isCorrectingFacts ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                      )}
-                      Correct Facts
-                    </Button>
-                    <Button size="sm" onClick={handleSave}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Save
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="max-h-[800px] overflow-y-auto">
-              {!generatedArgument && !isGenerating && (
-                <div className="text-center py-12 text-slate-500">
-                  <Scale className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                  <p>Configure and generate to see argument</p>
-                </div>
-              )}
-
-              {generatedArgument && generatedArgument.full_argument_markdown && (
-                <DraftBody
-                  text={generatedArgument.full_argument_markdown}
-                  documents={documentPool}
-                  className="prose prose-slate max-w-none bg-white p-6 rounded-lg border overflow-y-auto max-h-[700px]"
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {selectedMatter && (
-          <div id="material-panel" className="mt-6 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={applyAutoFill}>
-                Refresh from record
-              </Button>
-              {fillNote && <span className="text-xs text-slate-600">{fillNote}</span>}
+                <SelectTrigger className="h-8 w-56 text-xs">
+                  <SelectValue placeholder="Select matter" />
+                </SelectTrigger>
+                <SelectContent>
+                  {matters.map((matter) => (
+                    <SelectItem key={matter.id} value={matter.id}>
+                      {matter.matter_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <CaseMaterialPanel
-              ourPoints={ourPoints}
-              onAddPoint={(point) => setOurPoints([...ourPoints, { ...point, source: 'Manual', added_date: new Date().toISOString() }])}
-              onRemovePoint={(index) => setOurPoints(ourPoints.filter((_, position) => position !== index))}
-              clauses={clauses}
-              onAddClause={(clause) => setClauses([...clauses, clause])}
-              onRemoveClause={(index) => setClauses(clauses.filter((_, position) => position !== index))}
-              onToggleClause={(index) =>
-                setClauses(clauses.map((clause, position) => (position === index ? { ...clause, checked: !clause.checked } : clause)))
-              }
-              misstatements={misstatements}
-              onAddMisstatement={(entry) => setMisstatements([...misstatements, entry])}
-              onRemoveMisstatement={(index) => setMisstatements(misstatements.filter((_, position) => position !== index))}
-              procedural={procedural}
-              onProceduralChange={setProcedural}
-              record={record}
-              sweeps={sweeps}
-              onRecordChange={handleRecordChange}
-              onUseClause={(row) => setClauses([...clauses, exhibitClause(row)])}
-              chronology={chronologyData}
-              onUseChronology={(text) => setChronology(text)}
-              missingDocs={missingDocs}
-              onUploadDoc={openUpload}
-            />
+            <div>
+              <Label className="text-[11px]">Position</Label>
+              <Select value={position} onValueChange={setPosition}>
+                <SelectTrigger className="h-8 w-32 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['Claimant', 'Defendant', 'Appellant', 'Respondent'].map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" onClick={handleGenerate} disabled={isGenerating || !selectedMatter}>
+              {isGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+              Generate
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleSave} disabled={!generatedArgument}>
+              <Plus className="h-4 w-4 mr-1" />
+              Save version
+            </Button>
           </div>
-        )}
-
-        <div id="question-stage" className="mt-6">
-          <QuestionStage
-            questions={questions}
-            round={questionRound}
-            busy={isAsking}
-            conflictBusy={conflictBusy}
-            conflictChecked={questions.some((question) => question.conflict)}
-            hasMatter={Boolean(selectedMatter)}
-            onChange={updateQuestion}
-            onConvert={convertAnswerToPoint}
-            onAttach={handleAttachQuestionDoc}
-            attachingIndex={attachingIndex}
-            onAsk={handleAskQuestions}
-            onFollowUp={handleFollowUp}
-            onCheckConflicts={handleCheckConflicts}
-            onDraft={handleGenerate}
-            record={record}
-          />
         </div>
 
-        {selectedMatter && (
-          <div className="mt-6">
-            <LegalTestsPanel
-              matterId={selectedMatter}
-              tests={legalTests}
-              extracts={authorityExtracts}
-              caseLaw={mainAuthorities}
-              points={[
-                ...ourPoints.map((point) => ({ kind: 'our point', text: point.text })),
-                ...misstatements.map((entry) => ({ kind: 'misstatement', text: entry.statement })),
-              ]}
-              onRefresh={() => {
-                queryClient.invalidateQueries({ queryKey: ['legalTests', selectedMatter] });
-                queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });
-              }}
-            />
-          </div>
+        {hasUnsavedChanges && (
+          <Badge variant="destructive" className="animate-pulse">
+            Unsaved changes {currentArgumentVersion ? `— last saved v${currentArgumentVersion.version_number}` : ''}
+          </Badge>
         )}
 
-        {selectedMatter && (
-          <div className="mt-6">
-            <GapAnalysisPanel
-              matterId={selectedMatter}
-              matterName={currentMatter?.matter_name || ''}
-              court={currentMatter?.court || ''}
-              ourPoints={ourPoints}
-              tests={legalTests}
-              gap={latestGap}
-              record={record}
-              onRefresh={() => queryClient.invalidateQueries({ queryKey: ['gapAnalyses', selectedMatter] })}
-            />
-          </div>
+        {!selectedMatter && (
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-slate-600">
+              Pick a matter to build the Case Brief from its record.
+            </CardContent>
+          </Card>
         )}
 
         {selectedMatter && (
           <>
-            <div className="mt-6">
-              <ProspectsPanel
-                prospects={prospectsView}
-                assessment={assessment}
-                isAssessing={isAssessing}
-                onAssess={handleAssess}
-                savedRating={currentArgumentVersion?.prospects?.rating || ''}
-                history={prospectsHistory}
-                canAssess={Boolean(generatedArgument)}
-              />
-            </div>
+            <CaseBrief brief={brief} gateway={gateway} onOpenTab={setTab} />
 
-            <div className="mt-6">
-              <ImproveActions actions={prospects.actions} onAction={handleImproveAction} />
-            </div>
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsList className="flex flex-wrap h-auto gap-1">
+                {TABS.map(([value, label]) => (
+                  <TabsTrigger key={value} value={value} className="text-xs">
+                    {label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
 
-            <div className="mt-6">
-              <RegisterPanel
-                register={register}
-                record={record}
-                onAnswer={applyRegisterAnswer}
-                onUpload={openUpload}
-                onFixCitation={handleFixCitation}
-                onUseProposal={handleUseProposal}
-                onRerun={handleGenerate}
-                busy={isGenerating}
-                changes={draftChanges}
-                marks={draftMarks(generatedArgument?.full_argument_markdown || '')}
-              />
+              <TabsContent value="record" className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">The record</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        id="documents"
+                        type="file"
+                        multiple
+                        accept=".pdf,.txt,.doc,.docx"
+                        onChange={handleFileUpload}
+                        disabled={isUploading}
+                        className="block text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white"
+                      />
+                      {isUploading && (
+                        <span className="flex items-center gap-1 text-xs text-slate-600">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading…
+                        </span>
+                      )}
+                      <Button size="sm" variant="outline" onClick={applyAutoFill}>
+                        Refresh from record
+                      </Button>
+                      {fillNote && <span className="text-xs text-slate-600">{fillNote}</span>}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Each document is classified from its own text: only judgments, orders and transcripts count as the
+                      Court.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <CaseMaterialPanel
+                  ourPoints={ourPoints}
+                  onAddPoint={(point) => setOurPoints([...ourPoints, { ...point, source: 'Manual', added_date: new Date().toISOString() }])}
+                  onRemovePoint={(index) => setOurPoints(ourPoints.filter((_, position) => position !== index))}
+                  clauses={clauses}
+                  onAddClause={(clause) => setClauses([...clauses, clause])}
+                  onRemoveClause={(index) => setClauses(clauses.filter((_, position) => position !== index))}
+                  onToggleClause={(index) =>
+                    setClauses(clauses.map((clause, position) => (position === index ? { ...clause, checked: !clause.checked } : clause)))
+                  }
+                  misstatements={misstatements}
+                  onAddMisstatement={(entry) => setMisstatements([...misstatements, entry])}
+                  onRemoveMisstatement={(index) => setMisstatements(misstatements.filter((_, position) => position !== index))}
+                  procedural={procedural}
+                  onProceduralChange={setProcedural}
+                  record={record}
+                  sweeps={sweeps}
+                  onRecordChange={handleRecordChange}
+                  onUseClause={(row) => setClauses([...clauses, exhibitClause(row)])}
+                  chronology={chronologyData}
+                  onUseChronology={(text) => setChronology(text)}
+                  missingDocs={missingDocs}
+                  onUploadDoc={() => document.getElementById('documents')?.click()}
+                  dismissedDocs={dismissedDocs}
+                  onDismissDoc={dismissDoc}
+                />
+              </TabsContent>
+
+              <TabsContent value="gateway" className="space-y-4">
+                <TestFromMainAuthority
+                  matterId={selectedMatter}
+                  authorities={mainAuthorityPool}
+                  extracts={authorityExtracts}
+                  tests={legalTests}
+                  selectedId={mainAuthorityId}
+                  onSelect={setMainAuthority}
+                  points={[...ourPoints.map((point) => ({ kind: 'our point', text: point.text }))]}
+                  onRefresh={() => {
+                    queryClient.invalidateQueries({ queryKey: ['legalTests', selectedMatter] });
+                    queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] });
+                  }}
+                />
+
+                <GatewayPanel
+                  issues={gateway}
+                  promptness={promptness}
+                  orderId={procedural.order_document_id || ''}
+                  onOrderChange={setOrder}
+                  onOpenRecord={openRecordAt}
+                />
+
+                <ProspectsPanel
+                  rating={prospects.rating}
+                  explanation={prospects.explanation}
+                  issues={gateway}
+                  savedRating={currentArgumentVersion?.prospects?.rating || ''}
+                  history={prospectsHistory}
+                  assessment={assessment}
+                  isAssessing={isAssessing}
+                  onAssess={handleAssess}
+                  canAssess={Boolean(generatedArgument)}
+                />
+              </TabsContent>
+
+              <TabsContent value="draft" className="space-y-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Facts and expansions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <Label htmlFor="facts" className="text-xs">Core fact pattern *</Label>
+                      <Textarea
+                        id="facts"
+                        value={factPattern}
+                        onChange={(event) => setFactPattern(event.target.value)}
+                        rows={4}
+                        className="text-sm bg-slate-50"
+                        placeholder="Auto-populated from the matter. Edit as needed."
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {[
+                        ['chronology', 'Chronology', chronology, setChronology],
+                        ['disputed', 'Disputed facts', disputedFacts, setDisputedFacts],
+                        ['undisputed', 'Undisputed facts', undisputedFacts, setUndisputedFacts],
+                        ['legal_issues', 'Legal issues raised', legalIssuesRaised, setLegalIssuesRaised],
+                        ['procedural', 'Procedural history', proceduralHistory, setProceduralHistory],
+                        ['loss', 'Loss, harm or risk', lossHarmRisk, setLossHarmRisk]
+                      ].map(([id, label, value, setter]) => (
+                        <div key={id}>
+                          <Label htmlFor={id} className="text-xs">{label}</Label>
+                          <Textarea id={id} value={value} onChange={(event) => setter(event.target.value)} rows={2} className="text-sm" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button size="sm" onClick={handleGenerate} disabled={isGenerating}>
+                        {isGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                        Build the argument around the seven issues
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleCorrectFacts} disabled={isCorrectingFacts || !generatedArgument}>
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Correct facts
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">Draft</CardTitle>
+                      {isLoadingLastVersion && <span className="text-xs text-slate-500">Loading last saved version…</span>}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {!generatedArgument && (
+                      <p className="text-sm text-slate-500 py-8 text-center">No draft yet. Generate one from the facts above.</p>
+                    )}
+                    {generatedArgument?.full_argument_markdown && (
+                      <DraftBody
+                        text={generatedArgument.full_argument_markdown}
+                        documents={documentPool}
+                        className="prose prose-slate max-w-none bg-white p-4 rounded-lg border"
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+
+                <AICoach
+                  factPattern={factPattern}
+                  generatedArgument={generatedArgument}
+                  currentMatter={currentMatter}
+                  authorities={authorities}
+                  position={position}
+                  extracts={extracted.map((extract) => ({
+                    authority: mainAuthority?.name || '',
+                    citation: mainAuthority?.neutral_citation || '',
+                    paragraph_ref: extract.paragraph_ref || '',
+                    exact_text: extract.extract_text || '',
+                    proposition: extract.proposition || '',
+                    status: extract.status || ''
+                  }))}
+                />
+
+                <ImproveActions actions={checklistProspects.actions} onAction={handleImproveAction} />
+              </TabsContent>
+
+              <TabsContent value="checks" className="space-y-4">
+                <RegisterPanel
+                  register={register}
+                  record={record}
+                  onAnswer={applyRegisterAnswer}
+                  onUpload={() => document.getElementById('documents')?.click()}
+                  onFixCitation={handleFixCitation}
+                  onUseProposal={handleUseProposal}
+                  onRerun={handleGenerate}
+                  busy={isGenerating}
+                  changes={draftChanges}
+                  marks={draftMarks(generatedArgument?.full_argument_markdown || '')}
+                />
+
+                {generatedArgument?.full_argument_markdown && (
+                  <>
+                    <AuthorityCheckPanel
+                      text={generatedArgument.full_argument_markdown}
+                      extracts={extracted}
+                      mainAuthorities={mainAuthority ? [mainAuthority] : mainAuthorityPool}
+                    />
+                    <DocumentCheckPanel
+                      text={generatedArgument.full_argument_markdown}
+                      documents={documentPool}
+                      extracts={authorityExtracts}
+                    />
+                    <ExtractNeededPanel
+                      text={generatedArgument.full_argument_markdown}
+                      caseLaw={mainAuthorityPool}
+                      record={record}
+                      onSaved={() => queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] })}
+                    />
+                  </>
+                )}
+
+                <GapAnalysisPanel
+                  matterId={selectedMatter}
+                  matterName={currentMatter?.matter_name || ''}
+                  court={currentMatter?.court || ''}
+                  ourPoints={ourPoints}
+                  tests={legalTests}
+                  gap={latestGap}
+                  record={record}
+                  onRefresh={() => queryClient.invalidateQueries({ queryKey: ['gapAnalyses', selectedMatter] })}
+                />
+              </TabsContent>
+
+              <TabsContent value="questions" className="space-y-4">
+                <QuestionStage
+                  questions={questions}
+                  round={questionRound}
+                  busy={isAsking}
+                  conflictBusy={conflictBusy}
+                  conflictChecked={questions.some((question) => question.conflict)}
+                  hasMatter={Boolean(selectedMatter)}
+                  onChange={updateQuestion}
+                  onConvert={convertAnswerToPoint}
+                  onAttach={handleAttachQuestionDoc}
+                  attachingIndex={attachingIndex}
+                  onAsk={handleAskQuestions}
+                  onFollowUp={handleFollowUp}
+                  onCheckConflicts={handleCheckConflicts}
+                  onDraft={handleGenerate}
+                  record={record}
+                />
+              </TabsContent>
+            </Tabs>
+
+            <div className="flex items-center justify-between gap-2 border-t pt-3">
+              <p className="text-[11px] text-slate-500">{SAFETY_FOOTER}</p>
+              <Button size="sm" variant="ghost" onClick={openRecordAt}>
+                <Upload className="h-3.5 w-3.5 mr-1" />
+                Go to the record
+              </Button>
             </div>
           </>
-        )}
-
-        {generatedArgument && generatedArgument.full_argument_markdown && (
-          <div className="mt-6 space-y-6">
-            <AuthorityCheckPanel
-              text={generatedArgument.full_argument_markdown}
-              extracts={authorityExtracts.filter((extract) =>
-                mainAuthorityPool.some((record) => record.id === extract.case_law_id)
-              )}
-              mainAuthorities={mainAuthorityPool}
-            />
-            <DocumentCheckPanel
-              text={generatedArgument.full_argument_markdown}
-              documents={documentPool}
-              extracts={authorityExtracts}
-            />
-            <ExtractNeededPanel
-              text={generatedArgument.full_argument_markdown}
-              caseLaw={mainAuthorities}
-              record={record}
-              onSaved={() => queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] })}
-            />
-          </div>
         )}
       </div>
     </div>
