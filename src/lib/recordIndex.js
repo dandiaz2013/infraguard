@@ -275,7 +275,8 @@ export function indexDocument(document = {}) {
   doc.record_status = document.record_status || 'Filed or served';
   doc.filed_by = document.filed_by || '';
   doc.filed_date = document.document_date || document.filed_date || '';
-  doc.doc_date = doc.filed_date || dateFromDocument(doc.text, verdict.category);
+  // The document's own date wins; the stored date is only a fallback.
+  doc.doc_date = dateFromDocument(doc.text, verdict.category) || doc.filed_date || '';
   doc.exhibit_of = document.exhibit_of || '';
 
   const built = segmentize(doc.text);

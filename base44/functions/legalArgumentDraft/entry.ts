@@ -65,6 +65,22 @@ function buildRegister(items: Record<string, any>[]) {
   return `\n\n## THE REGISTER - risks and gaps already answered\n${lines.join('\n\n')}`;
 }
 
+function buildGatewayIssues(issues: Record<string, any>[], promptnessNote: string) {
+  if (!Array.isArray(issues) || issues.length === 0) return '';
+  const lines = issues.slice(0, 7).map((issue) => {
+    const ours = issue.our_answer
+      ? `ours: "${issue.our_answer.quote}" (${issue.our_answer.document_name}, ${issue.our_answer.ref})`
+      : 'ours: nothing in the record';
+    const theirs = issue.their_answer
+      ? `theirs: "${issue.their_answer.quote}" (${issue.their_answer.document_name}, ${issue.their_answer.ref})`
+      : 'theirs: nothing in the record';
+    return `ISSUE ${issue.number}: ${issue.title}\n  Question: ${issue.ask}\n  ${ours}\n  ${theirs}\n  Gap: ${issue.gap}\n  Next step: ${issue.next_step}`;
+  });
+  return `\n\n## THE SEVEN GATEWAY ISSUES - build the argument around these, in this order\n${lines.join('\n\n')}${
+    promptnessNote ? `\n\nPROMPTNESS (measured from the record): ${promptnessNote}` : ''
+  }`;
+}
+
 function buildDocuments(documents: Record<string, unknown>[]) {
   if (documents.length === 0) return '';
   return `\n\n## Uploaded Documents\n${documents
@@ -105,6 +121,8 @@ Deno.serve(async (req) => {
     const misstatements = Array.isArray(body.misstatements) ? body.misstatements.slice(0, 30) : [];
     const legalTests = Array.isArray(body.legal_tests) ? body.legal_tests.slice(0, 4) : [];
     const registerItems = Array.isArray(body.register_items) ? body.register_items.slice(0, 40) : [];
+    const gatewayIssues = Array.isArray(body.gateway) ? body.gateway.slice(0, 7) : [];
+    const promptnessNote = typeof body.promptness_note === 'string' ? body.promptness_note.slice(0, 1200) : '';
     const expansions = buildExpansions(body.expansions);
     const issueContext = issueTitle ? `\n\nLegal Issue: ${issueTitle}` : '';
 
@@ -124,7 +142,7 @@ YOU MUST:
 ## Core Fact Pattern (Auto-Populated from Matter)
 ${factPattern}
 
-${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}${buildLegalTests(legalTests)}${buildRegister(registerItems)}
+${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}${buildLegalTests(legalTests)}${buildRegister(registerItems)}${buildGatewayIssues(gatewayIssues, promptnessNote)}
 
 ## Instructions to AI
 ${MAIN_AUTHORITY_RULES}
@@ -155,6 +173,9 @@ When generating arguments:
 - Ignore emotional language unless legally relevant
 - Structure arguments clearly with headings and sub-points
 - Where appropriate, flag factual gaps or evidential weaknesses
+- Answer each of THE SEVEN GATEWAY ISSUES under its own heading, in order, using only the record quotations given for our answer and their answer
+- Never state a fixed period for promptness. Promptness is judged on all the circumstances, using the dates and the stored extract given
+- Keep each quotation to one line and give the document and paragraph for the rest
 
 ## Output Requirements
 Generate a professional, court-ready legal argument with:
@@ -170,11 +191,10 @@ Generate a professional, court-ready legal argument with:
    - Key material facts
    - Timeline if relevant
 
-4. **DETAILED ARGUMENT**
-   - Step-by-step legal analysis
-   - Application of authorities to facts
+4. **THE SEVEN GATEWAY ISSUES**
+   - One numbered section each, in this order: route and jurisdiction; the gateway relied on; materiality and what the decision turned on; known or knowable; promptness and explanation; finality and earlier appeals and refusals; relief sought
+   - Under each: our answer from the record, their answer from the record, the gap, and the conclusion
    - Proper UK citation format
-   - Address each element/requirement
 
 5. **COUNTER-ARGUMENTS & REBUTTAL**
    - Anticipate opposing arguments
@@ -191,7 +211,7 @@ Generate a professional, court-ready legal argument with:
 Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.
 
 End the draft with this exact line on its own:
-Draft for review. Check every authority against the official judgment before filing. Not legal advice.`;
+Draft for review. Check every authority and document reference against the originals before filing. Not legal advice.`;
 
     const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
       prompt,

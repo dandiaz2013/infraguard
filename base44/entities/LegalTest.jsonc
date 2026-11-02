@@ -14,6 +14,15 @@
       "type": "string",
       "description": "Case Law Library authority that sets out the test"
     },
+    "usage": {
+      "type": "string",
+      "enum": [
+        "Gateway application",
+        "Background: tests applied in the earlier decision"
+      ],
+      "default": "Gateway application",
+      "description": "Gateway application means the test comes from the main authority for this application. Background means the test was applied in the earlier decision and is not the test for this application."
+    },
     "source_extract_ids": {
       "type": "array",
       "items": {

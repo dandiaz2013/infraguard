@@ -1,8 +1,4 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
-import { buildEvidenceCorpus } from '../../shared/argumentContext.ts';
-import { caseFileDocuments } from '../../shared/caseFile.ts';
-
-const MAX_FILES = 12;
 const MAX_EXTRACT_CHARS = 1200;
 
 function buildExtractList(extracts: Record<string, unknown>[], caseLaw: Record<string, unknown>[]) {
@@ -39,13 +35,23 @@ Deno.serve(async (req) => {
     if (!matterId) return Response.json({ error: 'matter_id is required' }, { status: 400 });
 
     const matter = await base44.entities.Matter.get(matterId);
-    const files = await caseFileDocuments(base44, matterId);
-    const caseLaw = await base44.entities.CaseLaw.filter({ is_main: true });
+
+    // The test comes only from the main authority named for THIS application. Never from
+    // the judgment being challenged.
+    const wantedId = typeof body.case_law_id === 'string' ? body.case_law_id.trim() : '';
+    const mainRecords = await base44.entities.CaseLaw.filter({ is_main: true });
+    const caseLaw = wantedId
+      ? mainRecords.filter((record: Record<string, unknown>) => record.id === wantedId)
+      : mainRecords.slice(0, 1);
+    if (caseLaw.length === 0) {
+      return Response.json(
+        { error: 'Name the main authority for this application before a test can be proposed.' },
+        { status: 400 }
+      );
+    }
     const extracts = listOf(await base44.entities.AuthorityExtract.list('-added_date', 100)).filter((extract) =>
       caseLaw.some((record) => record.id === extract.case_law_id)
     );
-
-    const { corpus, count } = buildEvidenceCorpus(files as never, MAX_FILES, 5000, 30000);
 
     const prompt = `You propose a legal test for a UK matter. You may use ONLY the material supplied below.
 
@@ -53,17 +59,15 @@ Deno.serve(async (req) => {
 ${matter?.matter_name || 'unnamed matter'} | ${matter?.matter_type || 'type not recorded'} | Court: ${matter?.court || 'not recorded'}
 
 ## ABSOLUTE RULES
-- The test and every element must come from (a) the EXACT TEXT or the proposition of a stored extract below, or (b) a passage in the uploaded documents that identifies a test, quoted character for character.
+- The test and every element must come from the EXACT TEXT or the proposition of a stored extract below, and from nowhere else.
+- The authority below is the main authority named for this application. The judgment being challenged is NOT a source: any test it applied is background only.
 - Never recite a test, an element, a case, a citation or a quotation from memory. If the sources do not state a test, return an empty tests array.
-- Every element must carry source_extract_id (copied exactly from "Extract id:" above) OR source_document_name with source_paragraph_ref and a source_quote copied exactly from that document. If you cannot do that for an element, leave the element out.
+- Every element must carry source_extract_id (copied exactly from "Extract id:" above) and its paragraph reference. If you cannot do that for an element, leave the element out.
 - Do not use the general law, your own knowledge, or any case not listed below.
 - Maximum 4 tests, maximum 8 elements each.
 
-## CASE LAW LIBRARY EXTRACTS (the only quotable authority wording)
+## MAIN AUTHORITY EXTRACTS (the only quotable wording)
 ${buildExtractList(extracts, caseLaw)}
-
-## UPLOADED DOCUMENTS (${count} read)
-${corpus || 'NO DOCUMENTS UPLOADED'}
 
 Return the tests you can support, element by element.`;
 
@@ -121,7 +125,7 @@ Return the tests you can support, element by element.`;
             source_paragraph_ref: String(element.source_paragraph_ref || '').slice(0, 40),
             source_quote: String(element.source_quote || '').slice(0, 1200),
           }))
-          .filter((element: { text: string }) => element.text);
+          .filter((element: { text: string; source_extract_id: string }) => element.text && element.source_extract_id);
 
         return {
           name: String(test.name || 'Legal test').slice(0, 200),

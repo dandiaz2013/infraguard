@@ -2,6 +2,7 @@
 // a type plus a date, a judge, a case number or a neutral citation. Merged, auto-matched
 // to uploads, and never a sentence fragment.
 import { normalise } from '@/lib/authorityCheck';
+import { COURT_CATEGORIES } from '@/lib/documentType';
 import { ROLE_LABELS } from '@/lib/recordIndex';
 import { formatDate, toIsoDate } from '@/lib/documentDate';
 import { clip } from '@/lib/recordIndex';
@@ -73,7 +74,9 @@ function uploadedMatch(parts, documents) {
   const wantedCategory = CATEGORY_FOR[parts.type];
   return (
     documents.find((doc) => {
-      if (wantedCategory && doc.category && doc.category !== wantedCategory) return false;
+      const bothCourt =
+        COURT_CATEGORIES.includes(wantedCategory) && COURT_CATEGORIES.includes(doc.category || '');
+      if (wantedCategory && doc.category && doc.category !== wantedCategory && !bothCourt) return false;
       const text = String(doc.text || '');
       const docDate = doc.doc_date || doc.filed_date || '';
       if (parts.citation && new RegExp(escapeRe(parts.citation), 'i').test(text)) return true;

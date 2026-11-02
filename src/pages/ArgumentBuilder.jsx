@@ -205,10 +205,6 @@ export default function ArgumentBuilder() {
   );
   const prospects = useMemo(() => gatewayProspects(gateway), [gateway]);
   const dismissedDocs = procedural.dismissed_documents || [];
-  const brief = useMemo(
-    () => buildCaseBrief({ matter: currentMatter, gateway, promptness, missingDocs, dismissed: dismissedDocs, ourPoints }),
-    [currentMatter, gateway, promptness, missingDocs, dismissedDocs, ourPoints]
-  );
 
   const confirmedTests = legalTests.filter(
     (test) =>
@@ -529,6 +525,11 @@ export default function ArgumentBuilder() {
     setters: { setOurPoints, setClauses, setMisstatements, setFactPattern, setChronology, setLossHarmRisk },
     setGeneratedArgument
   });
+
+  const brief = useMemo(
+    () => buildCaseBrief({ matter: currentMatter, gateway, promptness, missingDocs, dismissed: dismissedDocs, ourPoints }),
+    [currentMatter, gateway, promptness, missingDocs, dismissedDocs, ourPoints]
+  );
 
   const prospectsHistory = argumentVersions
     .filter((entry) => entry.prospects?.rating)
