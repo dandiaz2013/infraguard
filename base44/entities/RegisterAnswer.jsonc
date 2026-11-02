@@ -1,0 +1,146 @@
+{
+  "name": "RegisterAnswer",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter the register item belongs to"
+    },
+    "item_id": {
+      "type": "string",
+      "description": "Stable id of the register item"
+    },
+    "item_type": {
+      "type": "string",
+      "description": "Risk, gap, law_date, missing_document, attribution, test_element, position"
+    },
+    "understanding_ok": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the user confirmed the system's reading of the issue"
+    },
+    "corrected_understanding": {
+      "type": "string",
+      "description": "The user's own wording of the issue, used instead of the system's reading"
+    },
+    "answer": {
+      "type": "string",
+      "enum": [
+        "Yes",
+        "No",
+        "Not sure"
+      ],
+      "description": "The user's answer to the one yes/no question"
+    },
+    "document_name": {
+      "type": "string",
+      "description": "Document the user pointed to"
+    },
+    "paragraph_ref": {
+      "type": "string",
+      "description": "Paragraph, page or line reference the user pointed to"
+    },
+    "quote": {
+      "type": "string",
+      "description": "Verified quotation found at that spot"
+    },
+    "paste_text": {
+      "type": "string",
+      "description": "Paragraph text pasted by the user"
+    },
+    "user_note": {
+      "type": "string",
+      "description": "The user's explanation"
+    },
+    "user_quote_verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the pasted text was found in the record"
+    },
+    "provision_text": {
+      "type": "string",
+      "description": "Exact text of the provision, pasted from the official source"
+    },
+    "commencement_date": {
+      "type": "string",
+      "description": "Commencement date recorded from the official source"
+    },
+    "revocation_note": {
+      "type": "string",
+      "description": "Revocation, replacement or transitional provision recorded from the official source"
+    },
+    "source_link": {
+      "type": "string",
+      "description": "Link to the official source"
+    },
+    "compared_confirmed": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the user has compared the text with the official source"
+    },
+    "accepted": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the user accepts the risk as it stands"
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the item was last answered"
+    }
+  },
+  "required": [
+    "matter_id",
+    "item_id"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

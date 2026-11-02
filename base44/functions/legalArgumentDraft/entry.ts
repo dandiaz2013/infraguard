@@ -44,6 +44,27 @@ function buildLegalTests(tests: Record<string, unknown>[]) {
   return `\n\n## CONFIRMED LEGAL TESTS - the argument must be organised element by element under each\n${blocks.join('\n\n')}`;
 }
 
+function buildRegister(items: Record<string, any>[]) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const lines = items.slice(0, 40).map((item, index) => {
+    const evidence = Array.isArray(item.evidence) && item.evidence.length > 0
+      ? item.evidence
+          .map((entry: Record<string, string>) => `${entry.document_name || ''}, ${entry.ref || ''}: "${String(entry.quote || '').slice(0, 300)}"`)
+          .join(' | ')
+      : 'none';
+    const parts = [
+      `ITEM ${index + 1} [${item.type || 'risk'} / ${item.status || 'Open'} / ${item.remaining || 'Unchanged'}] ${item.title || ''}`,
+      `  Question: ${item.question || ''}`,
+      `  Answered: ${item.answer || 'not answered'}${item.user_note ? ` - ${item.user_note}` : ''}`,
+      `  Verified record evidence: ${evidence}`,
+    ];
+    if (item.official_text) parts.push(`  Official text stored by the user: ${String(item.official_text).slice(0, 600)}`);
+    if (item.blocked_by) parts.push(`  Blocked: "${item.blocked_by}" is not in the record`);
+    return parts.join('\n');
+  });
+  return `\n\n## THE REGISTER - risks and gaps already answered\n${lines.join('\n\n')}`;
+}
+
 function buildDocuments(documents: Record<string, unknown>[]) {
   if (documents.length === 0) return '';
   return `\n\n## Uploaded Documents\n${documents
@@ -83,6 +104,7 @@ Deno.serve(async (req) => {
     const contractClauses = Array.isArray(body.contract_clauses) ? body.contract_clauses.slice(0, 30) : [];
     const misstatements = Array.isArray(body.misstatements) ? body.misstatements.slice(0, 30) : [];
     const legalTests = Array.isArray(body.legal_tests) ? body.legal_tests.slice(0, 4) : [];
+    const registerItems = Array.isArray(body.register_items) ? body.register_items.slice(0, 40) : [];
     const expansions = buildExpansions(body.expansions);
     const issueContext = issueTitle ? `\n\nLegal Issue: ${issueTitle}` : '';
 
@@ -102,7 +124,7 @@ YOU MUST:
 ## Core Fact Pattern (Auto-Populated from Matter)
 ${factPattern}
 
-${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}${buildLegalTests(legalTests)}
+${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}${buildLegalTests(legalTests)}${buildRegister(registerItems)}
 
 ## Instructions to AI
 ${MAIN_AUTHORITY_RULES}
@@ -117,6 +139,12 @@ When generating arguments:
 - Refer to OUR documents ONLY in this structured form: {{DOC:<document id>|para:<number>}} or {{DOC:<document id>|page:<number>|lines:<a-b>}}, using a document id from the document list. Never describe a document reference in any other way, and never invent a document id, page, line or paragraph number
 - Organise the DETAILED ARGUMENT element by element under each confirmed legal test: a heading for the test, then a sub-heading for each element ("Element 1", "Element 2"), with the evidence for that element, its document references, and the conclusion on it. If the evidence for an element is missing write [FACT NEEDED: describe what is needed]
 - Never restate a legal test from memory: use the elements exactly as they are given
+- Work through THE REGISTER. Where an item is answered and carries verified record evidence, weave it in and cite exactly the document and paragraph given for it
+- Where an item is answered but carries NO verified record evidence, put the point in the argument marked [USER STATEMENT - NO DOCUMENT REFERENCE]
+- Where an item records a contradiction between documents, mark it [CONFLICT: document, paragraph] where the point arises and set out what each side says, attributed to the party who said it
+- The official text stored in the register is the only source for what a provision says: cite it as recorded, with its commencement date and any revocation or transitional provision
+- Do not invent a case, paragraph, quotation, regulation, date or exhibit to fill a gap, and do not rely on a document marked Blocked
+- Never alter wording the user has marked as locked; keep it word for word
 - Give a paragraph number for one of our documents only when that number appears in the document text above. If it does not, use a page and line reference if the text shows them, otherwise write [DOCUMENT REFERENCE NEEDED: document name] instead of a paragraph number
 - A statement by the other side must read "stated by <party>, <document>, <paragraph>" and must never be presented as established fact
 - Treat auto-populated Matter facts as accurate unless contradicted
@@ -155,6 +183,10 @@ Generate a professional, court-ready legal argument with:
 6. **CONCLUSION & RELIEF SOUGHT**
    - Summary of argument
    - Remedies requested
+
+7. **GAPS AND RISKS**
+   - One line for each register item that is not closed: its status, the reference that answers it if any, and what remains open
+   - Mark anything that depends on a document not in the record as Blocked, naming the document
 
 Use formal UK legal language. Cite all authorities properly. Be thorough and persuasive.
 

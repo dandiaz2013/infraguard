@@ -14,7 +14,7 @@ export const ROLE_LABELS = {
   Unknown: 'Party not recorded',
 };
 
-const PARA_MARK = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.)])\s*/;
+const PARA_MARK = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.)]\s*|(\d{1,3})[.)]?\s{2,}(?=[A-Z(“]))/;
 const DECIMAL = /^\s*\d{1,3}\.\d/;
 const PAGE_MARK = /^\s*(?:page|p\.?)\s*(\d{1,3})\b/i;
 const MAX_SEGMENTS = 400;
@@ -101,7 +101,7 @@ function segmentList(blocks) {
     .slice(0, MAX_SEGMENTS);
 }
 
-export function buildSegments(text) {
+function segmentize(text) {
   const lines = String(text || '')
     .replace(/\r\n?/g, '\n')
     .split('\n');
@@ -118,7 +118,7 @@ export function buildSegments(text) {
     const marker = raw.match(PARA_MARK);
     if (marker) {
       sawParagraph = true;
-      current = { ref: `para ${Number(marker[1] || marker[2])}`, lines: [] };
+      current = { ref: `para ${Number(marker[1] || marker[2] || marker[3])}`, lines: [] };
       const rest = raw.slice(marker[0].length).trim();
       if (rest) current.lines.push(rest);
       paragraphs.push(current);
@@ -126,22 +126,43 @@ export function buildSegments(text) {
     }
     if (current) current.lines.push(raw.trim());
   }
-  if (sawParagraph) return segmentList(paragraphs);
+  if (sawParagraph) return { segments: segmentList(paragraphs), mode: 'paragraph' };
 
+  // Transcripts are the only documents cited by page and line.
   const pages = [];
-  let page = null;
-  let sawPage = false;
+  let pageNo = null;
+  let pageLines = [];
   for (const raw of lines) {
     const marker = raw.match(PAGE_MARK);
     if (marker) {
-      sawPage = true;
-      page = { ref: `p.${Number(marker[1])}`, lines: [] };
-      pages.push(page);
+      if (pageNo !== null && pageLines.length) pages.push({ pageNo, pageLines });
+      pageNo = Number(marker[1]);
+      pageLines = [];
       continue;
     }
-    if (page) page.lines.push(raw.trim());
+    if (pageNo !== null) pageLines.push(raw.trim());
   }
-  if (sawPage) return segmentList(pages);
+  if (pageNo !== null && pageLines.length) pages.push({ pageNo, pageLines });
+
+  if (pages.length) {
+    const segments = [];
+    pages.forEach((page) => {
+      const filled = page.pageLines.filter((line) => line.length > 0);
+      for (let start = 0; start < filled.length; start += 8) {
+        const slice = filled.slice(start, start + 8);
+        const from = start + 1;
+        const to = start + slice.length;
+        segments.push({
+          ref: `p.${page.pageNo} lines ${from}-${to}`,
+          text: slice.join(' ').replace(/\s+/g, ' ').trim(),
+        });
+      }
+    });
+    return {
+      segments: segments.filter((block) => block.text.length > 1).slice(0, MAX_SEGMENTS),
+      mode: 'page',
+    };
+  }
 
   const chunks = String(text || '')
     .split(/\n\s*\n/)
@@ -168,10 +189,21 @@ export function buildSegments(text) {
     if (buffer.trim()) blocks.push({ ref: `Section ${index + 1}.${part}`, text: buffer });
   });
 
-  return blocks
-    .slice(0, MAX_SEGMENTS)
-    .map((block) => ({ ref: block.ref, text: block.text.replace(/\s+/g, ' ').trim() }))
-    .filter((block) => block.text.length > 1);
+  return {
+    segments: blocks
+      .slice(0, MAX_SEGMENTS)
+      .map((block) => ({ ref: block.ref, text: block.text.replace(/\s+/g, ' ').trim() }))
+      .filter((block) => block.text.length > 1),
+    mode: 'section',
+  };
+}
+
+export function buildSegments(text) {
+  return segmentize(text).segments;
+}
+
+export function segmentMode(text) {
+  return segmentize(text).mode;
 }
 
 function itemsFromSegment(segment, doc, sink) {
@@ -225,7 +257,8 @@ export function indexDocument(document = {}) {
   doc.filed_date = document.filed_date || '';
   doc.exhibit_of = document.exhibit_of || '';
 
-  const segments = buildSegments(doc.text);
+  const built = segmentize(doc.text);
+  const segments = built.segments;
   const items = [];
   const seen = new Set();
 
@@ -249,6 +282,7 @@ export function indexDocument(document = {}) {
     filed_by: doc.filed_by,
     filed_date: doc.filed_date,
     exhibit_of: doc.exhibit_of,
+    index_mode: built.mode,
     segments,
     items: items.slice(0, MAX_ITEMS),
     segment_count: segments.length,

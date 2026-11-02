@@ -22,8 +22,11 @@ import ProspectsPanel from '@/components/argument/ProspectsPanel';
 import ImproveActions from '@/components/argument/ImproveActions';
 import { computeProspects } from '@/lib/prospectsChecklist';
 import { buildRecord } from '@/lib/recordIndex';
-import { buildSweeps, buildRisks, resolveFromRecord, questionStatus, exhibitClause } from '@/lib/recordFirst';
-import RecordRiskPanel from '@/components/argument/RecordRiskPanel';
+import { buildSweeps, resolveFromRecord, questionStatus, exhibitClause } from '@/lib/recordFirst';
+import { draftMarks } from '@/lib/draftChanges';
+import { dedupeAuthorities } from '@/lib/authorityNaming';
+import RegisterPanel from '@/components/argument/RegisterPanel';
+import useResolutionLoop from '@/hooks/useResolutionLoop';
 import { useNavigate } from 'react-router-dom';
 import fileToBase64 from '@/lib/fileToBase64';
 
@@ -59,6 +62,7 @@ export default function ArgumentBuilder() {
   const [procedural, setProcedural] = useState({});
   const [assessment, setAssessment] = useState(null);
   const [isAssessing, setIsAssessing] = useState(false);
+  const [pendingProposals, setPendingProposals] = useState([]);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -114,6 +118,15 @@ export default function ArgumentBuilder() {
     enabled: !!selectedMatter
   });
 
+  const { data: registerAnswers = [] } = useQuery({
+    queryKey: ['registerAnswers', selectedMatter],
+    queryFn: async () => {
+      const page = await base44.entities.RegisterAnswer.filter({ matter_id: selectedMatter }, { limit: 200 });
+      return page.items || [];
+    },
+    enabled: !!selectedMatter
+  });
+
   const { data: gapAnalyses = [] } = useQuery({
     queryKey: ['gapAnalyses', selectedMatter],
     queryFn: async () => {
@@ -137,7 +150,10 @@ export default function ArgumentBuilder() {
     [matterFiles, uploadedDocuments]
   );
 
-  const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
+  const mainAuthorityPool = React.useMemo(
+    () => dedupeAuthorities(mainAuthorities.filter((entry) => entry.is_main === true)).items,
+    [mainAuthorities]
+  );
 
   const record = React.useMemo(
     () =>
@@ -414,6 +430,7 @@ export default function ArgumentBuilder() {
       });
 
       setGeneratedArgument({ full_argument_markdown: response.data.argument });
+      setDraftChanges(compareNewDraft(response.data.argument));
     } catch (error) {
       console.error('Generation error:', error);
       alert(`Argument generation failed: ${error.message}`);
@@ -460,10 +477,49 @@ export default function ArgumentBuilder() {
   });
 
   const checklistKey = prospects.checklist.map((item) => `${item.id}:${item.result}`).join('|');
-  const recordRisks = React.useMemo(
-    () => buildRisks({ checklist: prospects.checklist, record, ourPoints, clauses, misstatements }),
-    [checklistKey, record, ourPoints, clauses, misstatements]
-  );
+  const {
+    register,
+    chronology: chronologyData,
+    missingDocs,
+    fillNote,
+    draftChanges,
+    setDraftChanges,
+    applyAutoFill,
+    applyRegisterAnswer,
+    useProposal: handleUseProposal,
+    fixCitation: handleFixCitation,
+    compare: compareNewDraft
+  } = useResolutionLoop({
+    matterId: selectedMatter,
+    record,
+    checklistKey,
+    checklist: prospects.checklist,
+    legalTests,
+    registerAnswers,
+    undisputedFacts,
+    generatedArgument,
+    pendingProposals,
+    setPendingProposals,
+    materials: { ourPoints, clauses, misstatements, factPattern, chronology, lossHarmRisk },
+    setters: { setOurPoints, setClauses, setMisstatements, setFactPattern, setChronology, setLossHarmRisk },
+    setGeneratedArgument
+  });
+
+  // A checklist item is met once a verified record quotation answers it.
+  const prospectsView = React.useMemo(() => {
+    const checklist = prospects.checklist.map((item) => {
+      const proof = register.items.find((entry) => entry.id === `check-${item.id}`)?.evidence?.[0];
+      if (!proof || item.result === 'Yes') return item;
+      return {
+        ...item,
+        result: 'Yes',
+        reason: `${item.reason ? `${item.reason} ` : ''}Verified in the record: ${proof.document_name}, ${proof.ref}.`
+      };
+    });
+    return { ...prospects, checklist };
+  }, [checklistKey, register]);
+
+  const openUpload = () => document.getElementById('documents')?.click();
 
   const prospectsHistory = argumentVersions
     .filter((record) => record.prospects?.rating)
@@ -650,7 +706,7 @@ export default function ArgumentBuilder() {
         matter_id: selectedMatter,
         position,
         argument_text: generatedArgument.full_argument_markdown,
-        checklist: prospects.checklist,
+        checklist: prospectsView.checklist,
         our_points: ourPoints,
         contract_clauses: clauses,
         misstatements
@@ -718,7 +774,7 @@ export default function ArgumentBuilder() {
         procedural,
         questions,
         question_round: questionRound,
-        prospects: { ...prospects, ...(assessment ? { assessment } : {}), generated_at: new Date().toISOString() },
+        prospects: { ...prospectsView, ...(assessment ? { assessment } : {}), generated_at: new Date().toISOString() },
         status: 'Draft',
         parent_version_id: currentArgumentVersion?.id
       });
@@ -1062,7 +1118,13 @@ export default function ArgumentBuilder() {
         </div>
 
         {selectedMatter && (
-          <div id="material-panel" className="mt-6">
+          <div id="material-panel" className="mt-6 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={applyAutoFill}>
+                Refresh from record
+              </Button>
+              {fillNote && <span className="text-xs text-slate-600">{fillNote}</span>}
+            </div>
             <CaseMaterialPanel
               ourPoints={ourPoints}
               onAddPoint={(point) => setOurPoints([...ourPoints, { ...point, source: 'Manual', added_date: new Date().toISOString() }])}
@@ -1082,6 +1144,10 @@ export default function ArgumentBuilder() {
               sweeps={sweeps}
               onRecordChange={handleRecordChange}
               onUseClause={(row) => setClauses([...clauses, exhibitClause(row)])}
+              chronology={chronologyData}
+              onUseChronology={(text) => setChronology(text)}
+              missingDocs={missingDocs}
+              onUploadDoc={openUpload}
             />
           </div>
         )}
@@ -1140,7 +1206,7 @@ export default function ArgumentBuilder() {
           <>
             <div className="mt-6">
               <ProspectsPanel
-                prospects={prospects}
+                prospects={prospectsView}
                 assessment={assessment}
                 isAssessing={isAssessing}
                 onAssess={handleAssess}
@@ -1155,7 +1221,18 @@ export default function ArgumentBuilder() {
             </div>
 
             <div className="mt-6">
-              <RecordRiskPanel risks={recordRisks} />
+              <RegisterPanel
+                register={register}
+                record={record}
+                onAnswer={applyRegisterAnswer}
+                onUpload={openUpload}
+                onFixCitation={handleFixCitation}
+                onUseProposal={handleUseProposal}
+                onRerun={handleGenerate}
+                busy={isGenerating}
+                changes={draftChanges}
+                marks={draftMarks(generatedArgument?.full_argument_markdown || '')}
+              />
             </div>
           </>
         )}

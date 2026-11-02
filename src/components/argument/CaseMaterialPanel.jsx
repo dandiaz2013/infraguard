@@ -5,6 +5,8 @@ import { FolderOpen } from 'lucide-react';
 import MaterialItemList from '@/components/argument/MaterialItemList';
 import RecordDocumentsPanel from '@/components/argument/RecordDocumentsPanel';
 import RecordSweepPanel from '@/components/argument/RecordSweepPanel';
+import ChronologyPanel from '@/components/argument/ChronologyPanel';
+import MissingDocsPanel from '@/components/argument/MissingDocsPanel';
 
 const PROCEDURAL_ITEMS = [
   ['court_confirmed', 'Court confirmed'],
@@ -18,6 +20,7 @@ export default function CaseMaterialPanel({
   misstatements, onAddMisstatement, onRemoveMisstatement,
   procedural, onProceduralChange,
   record, sweeps, onRecordChange, onUseClause,
+  chronology, onUseChronology, missingDocs, onUploadDoc,
 }) {
   return (
     <Card className="shadow-md">
@@ -38,6 +41,18 @@ export default function CaseMaterialPanel({
             onRecordChange={onRecordChange || (() => {})}
           />
         </div>
+
+        {chronology && (
+          <div id="chronology-panel">
+            <ChronologyPanel chronology={chronology} onUse={onUseChronology || (() => {})} />
+          </div>
+        )}
+
+        {missingDocs && missingDocs.length > 0 && (
+          <div id="missing-documents">
+            <MissingDocsPanel missing={missingDocs} onUpload={onUploadDoc || (() => {})} />
+          </div>
+        )}
 
         <div className="grid gap-6 md:grid-cols-3">
           <MaterialItemList
