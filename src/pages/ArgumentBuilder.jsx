@@ -21,6 +21,9 @@ import CaseMaterialPanel from '@/components/argument/CaseMaterialPanel';
 import ProspectsPanel from '@/components/argument/ProspectsPanel';
 import ImproveActions from '@/components/argument/ImproveActions';
 import { computeProspects } from '@/lib/prospectsChecklist';
+import { buildRecord } from '@/lib/recordIndex';
+import { buildSweeps, buildRisks, resolveFromRecord, questionStatus, exhibitClause } from '@/lib/recordFirst';
+import RecordRiskPanel from '@/components/argument/RecordRiskPanel';
 import { useNavigate } from 'react-router-dom';
 import fileToBase64 from '@/lib/fileToBase64';
 
@@ -135,6 +138,31 @@ export default function ArgumentBuilder() {
   );
 
   const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
+
+  const record = React.useMemo(
+    () =>
+      buildRecord([
+        ...matterFiles.map((file) => ({
+          id: file.id,
+          name: file.file_name,
+          text: file.text || '',
+          category: file.category,
+          record_status: file.record_status,
+          filed_by: file.filed_by,
+          filed_date: file.filed_date,
+          exhibit_of: file.exhibit_of
+        })),
+        ...uploadedDocuments.map((doc, index) => ({
+          id: `upload-${index + 1}`,
+          name: doc.name,
+          text: doc.content || '',
+          record_status: 'Draft'
+        }))
+      ]),
+    [matterFiles, uploadedDocuments]
+  );
+
+  const sweeps = React.useMemo(() => buildSweeps(record, ourPoints), [record, ourPoints]);
 
   const { data: argumentVersions = [] } = useQuery({
     queryKey: ['argumentVersions', selectedMatter],
@@ -367,7 +395,13 @@ export default function ArgumentBuilder() {
           }))
         })),
         documents: [
-          ...matterFiles.map((file) => ({ id: file.id, name: file.file_name, content: file.text || '' })),
+          ...matterFiles.map((file) => ({
+            id: file.id,
+            name: file.file_name,
+            content: file.text || '',
+            filed_by: file.filed_by || '',
+            record_status: file.record_status || 'Filed or served'
+          })),
           ...uploadedDocuments.map((doc, idx) => ({
             id: `upload-${idx + 1}`,
             name: doc.name,
@@ -421,8 +455,15 @@ export default function ArgumentBuilder() {
     caseLaw: mainAuthorities,
     extracts: authorityExtracts,
     legalTests,
-    gap: latestGap
+    gap: latestGap,
+    record
   });
+
+  const checklistKey = prospects.checklist.map((item) => `${item.id}:${item.result}`).join('|');
+  const recordRisks = React.useMemo(
+    () => buildRisks({ checklist: prospects.checklist, record, ourPoints, clauses, misstatements }),
+    [checklistKey, record, ourPoints, clauses, misstatements]
+  );
 
   const prospectsHistory = argumentVersions
     .filter((record) => record.prospects?.rating)
@@ -442,6 +483,24 @@ export default function ArgumentBuilder() {
     contract_clauses: clauses,
     misstatements
   });
+
+  const applyRecordAnswer = (question) => {
+    const resolution = resolveFromRecord(record, `${question.question || ''} ${question.why || ''}`);
+    const first = resolution.quotes[0];
+    return {
+      ...question,
+      status: questionStatus(resolution),
+      quote: first?.quote || '',
+      document_name: first?.document_name || '',
+      answer: resolution.outcome === 'ANSWERED FROM RECORD' && first ? first.quote : ''
+    };
+  };
+
+  const handleRecordChange = async (id, patch) => {
+    if (String(id).startsWith('upload-')) return;
+    await base44.entities.MatterFile.update(id, patch);
+    queryClient.invalidateQueries({ queryKey: ['matterFiles', selectedMatter] });
+  };
 
   const handleAskQuestions = async () => {
     if (!selectedMatter) {
@@ -463,7 +522,7 @@ export default function ArgumentBuilder() {
         conflict_resolution: '',
         round: 1
       }));
-      setQuestions(asked);
+      setQuestions(asked.map(applyRecordAnswer));
       setQuestionRound(1);
     } catch (error) {
       alert(`Could not prepare questions: ${error.message}`);
@@ -495,7 +554,7 @@ export default function ArgumentBuilder() {
         conflict_resolution: '',
         round: nextRound
       }));
-      setQuestions([...questions, ...asked]);
+      setQuestions([...questions, ...asked.map(applyRecordAnswer)]);
       setQuestionRound(nextRound);
     } catch (error) {
       alert(`Could not prepare follow-up questions: ${error.message}`);
@@ -1019,6 +1078,10 @@ export default function ArgumentBuilder() {
               onRemoveMisstatement={(index) => setMisstatements(misstatements.filter((_, position) => position !== index))}
               procedural={procedural}
               onProceduralChange={setProcedural}
+              record={record}
+              sweeps={sweeps}
+              onRecordChange={handleRecordChange}
+              onUseClause={(row) => setClauses([...clauses, exhibitClause(row)])}
             />
           </div>
         )}
@@ -1039,6 +1102,7 @@ export default function ArgumentBuilder() {
             onFollowUp={handleFollowUp}
             onCheckConflicts={handleCheckConflicts}
             onDraft={handleGenerate}
+            record={record}
           />
         </div>
 
@@ -1066,6 +1130,7 @@ export default function ArgumentBuilder() {
               ourPoints={ourPoints}
               tests={legalTests}
               gap={latestGap}
+              record={record}
               onRefresh={() => queryClient.invalidateQueries({ queryKey: ['gapAnalyses', selectedMatter] })}
             />
           </div>
@@ -1088,6 +1153,10 @@ export default function ArgumentBuilder() {
             <div className="mt-6">
               <ImproveActions actions={prospects.actions} onAction={handleImproveAction} />
             </div>
+
+            <div className="mt-6">
+              <RecordRiskPanel risks={recordRisks} />
+            </div>
           </>
         )}
 
@@ -1108,6 +1177,7 @@ export default function ArgumentBuilder() {
             <ExtractNeededPanel
               text={generatedArgument.full_argument_markdown}
               caseLaw={mainAuthorities}
+              record={record}
               onSaved={() => queryClient.invalidateQueries({ queryKey: ['authorityExtracts'] })}
             />
           </div>

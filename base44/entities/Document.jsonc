@@ -46,6 +46,34 @@
     "notes": {
       "type": "string",
       "description": "Internal notes about the document"
+    },
+    "record_status": {
+      "type": "string",
+      "enum": [
+        "Filed or served",
+        "Draft",
+        "Reference only"
+      ],
+      "default": "Filed or served",
+      "description": "Filed or served documents are the record for this matter"
+    },
+    "filed_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date filed or served"
+    },
+    "filed_by": {
+      "type": "string",
+      "enum": [
+        "Ours",
+        "Other party",
+        "Court"
+      ],
+      "description": "Who filed or produced the document"
+    },
+    "exhibit_of": {
+      "type": "string",
+      "description": "Optional parent document this document is an exhibit to"
     }
   },
   "required": [

@@ -7,15 +7,23 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, ClipboardPaste } from 'lucide-react';
 
-export default function ExtractPasteBox({ caseLaw = [], defaultCaseId = '', proposition = '', onSaved }) {
+export default function ExtractPasteBox({
+  caseLaw = [], defaultCaseId = '', proposition = '', onSaved,
+  defaultParagraph = '', defaultText = '', sourceNote = '',
+}) {
   const [caseId, setCaseId] = useState(defaultCaseId);
-  const [paragraphRef, setParagraphRef] = useState('');
-  const [text, setText] = useState('');
+  const [paragraphRef, setParagraphRef] = useState(defaultParagraph);
+  const [text, setText] = useState(defaultText);
   const [saving, setSaving] = useState(false);
 
   React.useEffect(() => {
     if (defaultCaseId) setCaseId(defaultCaseId);
   }, [defaultCaseId]);
+
+  React.useEffect(() => {
+    if (defaultParagraph) setParagraphRef(defaultParagraph);
+    if (defaultText) setText(defaultText);
+  }, [defaultParagraph, defaultText]);
 
   const save = async () => {
     if (!caseId || !paragraphRef.trim() || !text.trim()) return;
@@ -40,8 +48,14 @@ export default function ExtractPasteBox({ caseLaw = [], defaultCaseId = '', prop
     <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
       <p className="text-xs font-semibold text-amber-900 flex items-center gap-2">
         <ClipboardPaste className="h-4 w-4" />
-        Paste the paragraph from the official judgment, word for word
+        {sourceNote || 'Paste the paragraph from the official judgment, word for word'}
       </p>
+
+      {sourceNote && (
+        <p className="text-[11px] text-amber-900 bg-white border border-amber-200 rounded px-2 py-1">
+          Taken from the record. Check it against the official judgment before you rely on it.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>

@@ -43,8 +43,28 @@ export function computeProspects({
   extracts = [],
   legalTests = [],
   gap = null,
+  record = null,
 } = {}) {
   const draft = String(text || '');
+
+  const recordNames = (record?.documents || []).map((doc) => doc.name).filter(Boolean);
+  const recordNorm = record?.text ? normalise(record.text) : '';
+
+  const inRecord = (name) => {
+    if (recordNames.length === 0) return true;
+    const target = normalise(name);
+    if (!target) return false;
+    return recordNames.some((entry) => {
+      const other = normalise(entry);
+      return Boolean(other) && (other.includes(target) || target.includes(other));
+    });
+  };
+
+  const clauseInRecord = (clause) => {
+    if (!recordNorm) return true;
+    const value = normalise(clause.text);
+    return Boolean(value) && recordNorm.includes(value);
+  };
   const checklist = [];
 
   // 1. Legal test supported by a stored extract
@@ -96,7 +116,7 @@ export function computeProspects({
   );
 
   // 3. Key facts backed by a document and paragraph
-  const pointsWithReference = ourPoints.filter(hasReference);
+  const pointsWithReference = ourPoints.filter((point) => hasReference(point) && inRecord(point.document_name));
   checklist.push(
     makeItem(
       'facts_supported',
@@ -148,7 +168,8 @@ export function computeProspects({
   );
 
   // 6. Contract clauses and rules stored and checked
-  const uncheckedClauses = clauses.filter((clause) => !clause.checked);
+  const checkedClauses = clauses.filter((clause) => clause.checked && clauseInRecord(clause));
+  const uncheckedClauses = clauses.filter((clause) => !checkedClauses.includes(clause));
   checklist.push(
     makeItem(
       'clauses',
@@ -157,7 +178,7 @@ export function computeProspects({
       clauses.length === 0 ? 'No' : uncheckedClauses.length === 0 ? 'Yes' : 'Partly',
       clauses.length === 0
         ? 'No contract clause or rule has been stored.'
-        : `${clauses.length} stored, ${uncheckedClauses.length} not yet checked against the document.`,
+        : `${clauses.length} stored, ${uncheckedClauses.length} not yet checked against the record or the official text.`,
       'Store the clause text and confirm it word for word.',
       'Low',
       'clause'
@@ -165,7 +186,7 @@ export function computeProspects({
   );
 
   // 7. Misstatements supported by evidence
-  const unsupportedMisstatements = misstatements.filter((entry) => !entry.document_name);
+  const unsupportedMisstatements = misstatements.filter((entry) => !entry.document_name || !inRecord(entry.document_name));
   checklist.push(
     makeItem(
       'misstatements',

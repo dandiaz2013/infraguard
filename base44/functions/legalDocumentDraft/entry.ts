@@ -32,6 +32,25 @@ Deno.serve(async (req) => {
       ? `\n\n## SAVED ARGUMENT (Version ${savedArgument.version_number})\n**Title:** ${savedArgument.argument_title}\n**Position:** ${savedArgument.position}\n**Court:** ${savedArgument.court}\n\n### Fact Pattern:\n${savedArgument.fact_pattern}\n\n### Generated Argument:\n${savedArgument.argument_text || ''}`
       : '';
 
+    const recordDocuments = Array.isArray(body.record_documents) ? body.record_documents.slice(0, 30) : [];
+    const recordFindings = Array.isArray(body.record_findings) ? body.record_findings.slice(0, 40) : [];
+    const recordContext = recordDocuments.length === 0
+      ? ''
+      : `\n\n## THE RECORD (filed or served documents: authoritative on what was said, argued, evidenced and ruled, never on what the law is)\n${recordDocuments
+        .map((doc: any) => `- ${doc.name || 'Document'} (${doc.role || 'party not recorded'}, ${doc.record_status || 'filed or served'}${doc.filed_date ? `, ${doc.filed_date}` : ''})${Array.isArray(doc.provisions) && doc.provisions.length ? `\n  Provisions mentioned: ${doc.provisions.slice(0, 8).join('; ')}` : ''}`)
+        .join('\n')}${recordFindings.length
+        ? `\n\n### Findings and rulings in the record\n${recordFindings
+          .map((row: any) => `- ${row.document_name || 'Document'}, ${row.ref || 'reference not recorded'}: "${row.quote || ''}"`)
+          .join('\n')}`
+        : ''}`;
+
+    const RECORD_RULES = `RECORD RULES:
+- Cite a document only by its exact name and the paragraph or page shown in the record above
+- Never invent a quote, a paragraph number, a regulation, a case, a date or an exhibit
+- A statement by the other side must read "stated by <party>, <document>, <paragraph>" and must never be presented as established fact
+- Where the record does not deal with a point, write [FACT NEEDED] or [DOCUMENT REFERENCE NEEDED: document name] rather than filling the gap
+- End the document with: Draft for review. Check every document reference and authority against the originals before filing. Not legal advice.`;
+
     const authorities = Array.isArray(body.authorities) ? body.authorities.slice(0, 40) : [];
     const mainAuthorities = Array.isArray(body.main_authorities) ? body.main_authorities.slice(0, 20) : [];
     const authoritiesContext = authorities.length > 0
@@ -46,8 +65,11 @@ Briefing Notes:
 ${briefingNotes}
 ${argumentContext}
 ${authoritiesContext}${buildMainAuthorityBlock(mainAuthorities)}
+${recordContext}
 
 ${MAIN_AUTHORITY_RULES}
+
+${RECORD_RULES}
 
 Requirements:
 - Use formal UK legal language and formatting

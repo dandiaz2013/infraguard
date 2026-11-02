@@ -3,6 +3,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Checkbox } from '@/components/ui/checkbox';
 import { FolderOpen } from 'lucide-react';
 import MaterialItemList from '@/components/argument/MaterialItemList';
+import RecordDocumentsPanel from '@/components/argument/RecordDocumentsPanel';
+import RecordSweepPanel from '@/components/argument/RecordSweepPanel';
 
 const PROCEDURAL_ITEMS = [
   ['court_confirmed', 'Court confirmed'],
@@ -15,6 +17,7 @@ export default function CaseMaterialPanel({
   clauses, onAddClause, onRemoveClause, onToggleClause,
   misstatements, onAddMisstatement, onRemoveMisstatement,
   procedural, onProceduralChange,
+  record, sweeps, onRecordChange, onUseClause,
 }) {
   return (
     <Card className="shadow-md">
@@ -28,6 +31,14 @@ export default function CaseMaterialPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div id="record-documents">
+          <h4 className="text-sm font-semibold text-slate-900 mb-1">The record</h4>
+          <RecordDocumentsPanel
+            documents={record?.documents || []}
+            onRecordChange={onRecordChange || (() => {})}
+          />
+        </div>
+
         <div className="grid gap-6 md:grid-cols-3">
           <MaterialItemList
             title="Our points"
@@ -88,6 +99,11 @@ export default function CaseMaterialPanel({
               </label>
             ))}
           </div>
+        </div>
+
+        <div id="record-sweeps">
+          <h4 className="text-sm font-semibold text-slate-900 mb-1">Record sweeps</h4>
+          <RecordSweepPanel sweeps={sweeps} onUseClause={onUseClause} />
         </div>
       </CardContent>
     </Card>

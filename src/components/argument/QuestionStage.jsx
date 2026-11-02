@@ -1,16 +1,30 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
+import { Loader2, MessageCircleQuestion, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import QuestionCard from '@/components/argument/QuestionCard';
+import RecordAnswer from '@/components/argument/RecordAnswer';
+import { resolveFromRecord } from '@/lib/recordFirst';
 
 export default function QuestionStage({
   questions, round, busy, conflictBusy, conflictChecked,
   onChange, onConvert, onAttach, attachingIndex,
-  onAsk, onFollowUp, onCheckConflicts, onDraft, hasMatter,
+  onAsk, onFollowUp, onCheckConflicts, onDraft, hasMatter, record,
 }) {
   const answeredCount = questions.filter((question) => (question.answer || '').trim()).length;
   const openConflicts = questions.filter((question) => question.conflict && !question.conflict_resolution).length;
+
+  const resolutions = React.useMemo(
+    () =>
+      questions.map((question) =>
+        resolveFromRecord(record, `${question.question || ''} ${question.why || ''}`)
+      ),
+    [questions, record]
+  );
+
+  const fromRecord = resolutions.filter((resolution) => resolution.outcome === 'ANSWERED FROM RECORD').length;
+  const stillToAsk = resolutions.filter((resolution) => resolution.outcome === 'NOT IN THE RECORD').length;
+  const everythingInRecord = questions.length > 0 && stillToAsk === 0;
 
   return (
     <Card className="shadow-md">
@@ -20,7 +34,7 @@ export default function QuestionStage({
           Stage A · Questions before drafting
         </CardTitle>
         <CardDescription>
-          The questions are built only from this matter's documents, your points, the stored extracts and the clauses you recorded. Answer what you can, then draft.
+          Every question is searched against the whole record first. Only what the record cannot answer is put to you.
         </CardDescription>
       </CardHeader>
 
@@ -30,7 +44,7 @@ export default function QuestionStage({
         {hasMatter && questions.length === 0 && (
           <div className="text-center py-6">
             <p className="text-sm text-slate-600 mb-3">
-              No questions yet. JurisAI will ask 5 to 12, most important first, and will not invent any fact.
+              No questions yet. JurisAI searches the record first and only then asks what is still missing.
             </p>
             <Button onClick={onAsk} disabled={busy} className="bg-blue-600 hover:bg-blue-700">
               {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MessageCircleQuestion className="h-4 w-4 mr-2" />}
@@ -46,6 +60,8 @@ export default function QuestionStage({
               <span>·</span>
               <span>{answeredCount} answered</span>
               <span>·</span>
+              <span>{fromRecord} from the record</span>
+              <span>·</span>
               <span>Round {round} of 3</span>
               {openConflicts > 0 && (
                 <span className="flex items-center gap-1 text-red-700 font-medium">
@@ -55,17 +71,26 @@ export default function QuestionStage({
               )}
             </div>
 
+            {everythingInRecord && (
+              <p className="flex items-center gap-2 text-sm text-green-900 bg-green-50 border border-green-200 rounded px-3 py-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Everything needed is in the record. Confirm the answers and go straight to drafting.
+              </p>
+            )}
+
             <div className="space-y-3">
               {questions.map((question, index) => (
-                <QuestionCard
-                  key={index}
-                  question={question}
-                  index={index}
-                  onChange={onChange}
-                  onConvert={onConvert}
-                  onAttach={onAttach}
-                  attaching={attachingIndex === index}
-                />
+                <div key={index} className="space-y-1">
+                  <RecordAnswer resolution={resolutions[index]} showSearched={false} />
+                  <QuestionCard
+                    question={question}
+                    index={index}
+                    onChange={onChange}
+                    onConvert={onConvert}
+                    onAttach={onAttach}
+                    attaching={attachingIndex === index}
+                  />
+                </div>
               ))}
             </div>
 

@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Loader2, SearchCheck, Copy, Check, FileText } from 'lucide-react';
 import { runGapAnalysis, saveFactListAnswers, saveSupplementaryStatement, summarise } from '@/lib/gapAnalysis';
 import { buildSupplementaryStatement, SAFETY_FOOTER } from '@/lib/supplementaryStatement';
+import { searchRecord } from '@/lib/recordFirst';
+import { ROLE_LABELS } from '@/lib/recordIndex';
 
 const STATUS_STYLE = {
   Covered: 'bg-green-100 text-green-900 border-green-300',
@@ -15,7 +17,7 @@ const STATUS_STYLE = {
   'Not covered': 'bg-red-100 text-red-900 border-red-300',
 };
 
-export default function GapAnalysisPanel({ matterId, matterName, court, ourPoints = [], tests = [], gap, onRefresh }) {
+export default function GapAnalysisPanel({ matterId, matterName, court, ourPoints = [], tests = [], gap, record, onRefresh }) {
   const confirmed = tests.filter((test) => test.status === 'Confirmed by user');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -100,6 +102,8 @@ export default function GapAnalysisPanel({ matterId, matterName, court, ourPoint
   };
 
   const counts = summarise(gap?.summary);
+  const elementRecord = (gap?.element_results || []).map((row) => searchRecord(record, row.element_text || '', 2).matches);
+  const pointRecord = (gap?.point_results || []).map((row) => searchRecord(record, row.point || '', 2).matches);
 
   return (
     <Card className="shadow-md" id="gap-analysis">
@@ -164,10 +168,13 @@ export default function GapAnalysisPanel({ matterId, matterName, court, ourPoint
                     <th className="py-2 px-3">What is missing</th>
                     <th className="py-2 px-3">Issue for submissions</th>
                     <th className="py-2 px-3">Other side / judgment</th>
+                    <th className="py-2 px-3">What the record says</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(gap.element_results || []).map((row, index) => (
+                  {(gap.element_results || []).map((row, index) => {
+                    const recordHits = elementRecord[index] || [];
+                    return (
                     <tr key={index} className="border-t border-slate-100 align-top">
                       <td className="py-2 px-3 max-w-xs">
                         <p className="font-medium text-slate-800">
@@ -187,8 +194,18 @@ export default function GapAnalysisPanel({ matterId, matterName, court, ourPoint
                       <td className="py-2 px-3 text-slate-700 max-w-xs">{row.missing || '—'}</td>
                       <td className="py-2 px-3 text-slate-700 max-w-xs">{row.bridge || '—'}</td>
                       <td className="py-2 px-3 text-slate-700 max-w-xs">{row.other_side || '—'}</td>
+                      <td className="py-2 px-3 text-slate-700 max-w-xs">
+                        {recordHits.length === 0
+                          ? '—'
+                          : recordHits.map((hit, position) => (
+                              <p key={position} className="text-[11px]">
+                                {ROLE_LABELS[hit.role] || hit.role} — {hit.document_name}, {hit.ref} — “{hit.quote}”
+                              </p>
+                            ))}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -203,6 +220,11 @@ export default function GapAnalysisPanel({ matterId, matterName, court, ourPoint
                         {row.status}
                       </Badge>{' '}
                       {row.point} {row.covered_where ? <span className="text-slate-500">— {row.covered_where}</span> : null}
+                      {(pointRecord[index] || []).map((hit, position) => (
+                        <span key={position} className="block text-[11px] text-slate-500">
+                          Record: {hit.document_name}, {hit.ref} — “{hit.quote}”
+                        </span>
+                      ))}
                     </li>
                   ))}
                 </ul>

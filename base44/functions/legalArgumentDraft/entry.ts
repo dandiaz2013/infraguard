@@ -118,6 +118,7 @@ When generating arguments:
 - Organise the DETAILED ARGUMENT element by element under each confirmed legal test: a heading for the test, then a sub-heading for each element ("Element 1", "Element 2"), with the evidence for that element, its document references, and the conclusion on it. If the evidence for an element is missing write [FACT NEEDED: describe what is needed]
 - Never restate a legal test from memory: use the elements exactly as they are given
 - Give a paragraph number for one of our documents only when that number appears in the document text above. If it does not, use a page and line reference if the text shows them, otherwise write [DOCUMENT REFERENCE NEEDED: document name] instead of a paragraph number
+- A statement by the other side must read "stated by <party>, <document>, <paragraph>" and must never be presented as established fact
 - Treat auto-populated Matter facts as accurate unless contradicted
 - Prioritise user-added expansions
 - Identify legally material facts

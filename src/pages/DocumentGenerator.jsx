@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input';
 import { FileText, Loader2, Download, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import ExtractCheckPanel from '@/components/authorities/ExtractCheckPanel';
+import RecordSweepPanel from '@/components/argument/RecordSweepPanel';
+import { buildRecord } from '@/lib/recordIndex';
+import { buildSweeps } from '@/lib/recordFirst';
 
 export default function DocumentGenerator() {
   const [selectedMatter, setSelectedMatter] = useState('');
@@ -44,7 +47,35 @@ export default function DocumentGenerator() {
     queryFn: () => base44.entities.AuthorityExtract.list('-added_date'),
   });
 
+  const { data: matterFiles = [] } = useQuery({
+    queryKey: ['matterFiles', selectedMatter],
+    queryFn: async () => {
+      const page = await base44.entities.MatterFile.filter({ matter_id: selectedMatter }, { limit: 30 });
+      return page.items || [];
+    },
+    enabled: !!selectedMatter
+  });
+
   const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
+
+  const record = React.useMemo(
+    () =>
+      buildRecord(
+        matterFiles.map((file) => ({
+          id: file.id,
+          name: file.file_name,
+          text: file.text || '',
+          category: file.category,
+          record_status: file.record_status,
+          filed_by: file.filed_by,
+          filed_date: file.filed_date,
+          exhibit_of: file.exhibit_of
+        }))
+      ),
+    [matterFiles]
+  );
+
+  const sweeps = React.useMemo(() => buildSweeps(record, []), [record]);
 
   const { data: latestArgument } = useQuery({
     queryKey: ['latest-argument', selectedMatter],
@@ -99,6 +130,18 @@ export default function DocumentGenerator() {
           citation: a.citation,
           legal_principle: a.legal_principle,
           relevance: a.relevance
+        })),
+        record_documents: record.documents.map((doc) => ({
+          name: doc.name,
+          role: doc.role,
+          record_status: doc.record_status,
+          filed_date: doc.filed_date || '',
+          provisions: doc.law_items.map((item) => `${item.label} (${item.ref})`)
+        })),
+        record_findings: sweeps.court_found.slice(0, 20).map((row) => ({
+          document_name: row.document_name,
+          ref: row.ref,
+          quote: row.quote
         })),
         main_authorities: mainAuthorityPool.map((record) => ({
           name: record.name,
@@ -298,6 +341,27 @@ export default function DocumentGenerator() {
               )}
               mainAuthorities={mainAuthorityPool}
             />
+          </div>
+        )}
+
+        {selectedMatter && record.documents.length > 0 && (
+          <div className="mt-6">
+            <Card className="shadow-md">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="h-5 w-5 text-slate-700" />
+                  The record used for this document
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-slate-500">
+                  {record.documents.length} filed or served document
+                  {record.documents.length === 1 ? '' : 's'} indexed. A statement by the other side is labelled as stated
+                  by that party, never as established fact.
+                </p>
+                <RecordSweepPanel sweeps={sweeps} />
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
