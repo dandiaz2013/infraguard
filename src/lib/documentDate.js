@@ -123,19 +123,25 @@ export function detectDocumentDate(text = '', category = '') {
 
   const anchors = [];
   if (category === 'Judgments') {
+    // The heading line only: "Handed down", "Dated", "Before ... sitting on".
     anchors.push([
-      /(?:handed down|delivered|given|approved|judgment date|date of judgment)[^\n.]{0,120}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i,
+      /(?:handed down|delivered|given|approved|sitting on|judgment date|date of judgment)[^\n.]{0,120}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i,
       'judgment date'
     ]);
     anchors.push([
-      /(?:handed down|delivered|approved)[^\n]{0,40}?(\b\d{1,2}\/\d{1,2}\/\d{4}\b)/i,
+      /(?:handed down|delivered|approved|sitting on)[^\n]{0,40}?(\b\d{1,2}\/\d{1,2}\/\d{4}\b)/i,
       'judgment date'
     ]);
-    anchors.push([/(?:^|\n)\s*Date\s*:\s*([^\n]{6,30})/, 'judgment date']);
+    anchors.push([/(?:^|\n)\s*(?:Date|Dated)\s*:\s*([^\n]{6,30})/, 'judgment date']);
   }
   if (category === 'Orders') {
+    // The order's own date line only, never a later order mentioned in the body.
     anchors.push([
-      /(?:DATED|dated|Date of order)[^\n.]{0,60}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/,
+      /(?:DATED|dated|Date of order|Made on|MADE ON|order made on)[^\n.]{0,60}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/,
+      'order date'
+    ]);
+    anchors.push([
+      /(?:made|sealed|issued|dated)\s*(?:on)?\s*:?\s*(\b\d{1,2}\/\d{1,2}\/\d{4}\b)/i,
       'order date'
     ]);
   }
@@ -156,6 +162,11 @@ export function detectDocumentDate(text = '', category = '') {
       const value = toIsoDate(match[1]);
       if (value) return { date: value, source };
     }
+  }
+
+  // A judgment or an order is never dated from a later reference to another one.
+  if (category === 'Judgments' || category === 'Orders') {
+    return { date: '', source: 'no date on the heading or the date line' };
   }
 
   const fallback = firstDateIn(head);

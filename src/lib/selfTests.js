@@ -16,6 +16,10 @@ import { rateApproach } from '@/lib/issueApproach';
 import { buildFieldGroups, markUserStatement, userStatementLines, USER_MARKER } from '@/lib/fieldStates';
 import { resolveRecordBlock } from '@/lib/draftSections';
 import { resolveDocumentRefs } from '@/lib/docReferences';
+import { applicationDetails, isVariation } from '@/lib/applicationContext';
+import { buildDraftRequest, pickParagraphs, skeletonStructure } from '@/lib/documentPack';
+import { reliefConflicts } from '@/lib/draftCheck';
+import { buildGateway } from '@/lib/gateway';
 import { findTestMatter } from '@/lib/testMatter';
 import {
   N244_TEXT,
@@ -448,6 +452,119 @@ export const MODULE_TESTS = [
         : fail(
             `${list.length} record(s): neutral "${list[0]?.neutral_citation || 'none'}", report "${list[0]?.report_reference || 'none'}".`
           );
+    }
+  },
+  {
+    id: 'skeleton-from-argument',
+    module: 'legalDocumentDraft',
+    label: 'The skeleton names the order challenged, every gateway issue, and cites the N244 and witness statement',
+    run: async () => {
+      const documents = TEST_DOCUMENTS.map((doc) => ({
+        id: doc.file_name,
+        file_name: doc.file_name,
+        category: doc.category,
+        party: doc.party,
+        text: doc.text,
+        record_status: 'Filed or served',
+        confirmed_date: detectDocumentDate(doc.text, doc.category).date,
+        date_confirmed: true
+      }));
+      const orderDoc = documents.find((doc) => doc.category === 'Orders');
+      const notice = documents.find((doc) => doc.category === 'Application notices');
+      const statement = documents.find(
+        (doc) => doc.category === 'Witness statements' && /Jane/.test(doc.file_name)
+      );
+      if (!orderDoc || !notice || !statement) return fail('The self-test documents are incomplete.');
+
+      const record = buildRecord(documents.map(toRecordDoc));
+      const details = applicationDetails({ documents, orderId: orderDoc.id });
+      const variation = isVariation(details);
+      const extracts = [
+        {
+          case_law_id: 'self-test-authority',
+          case_name: 'Philipp v Barclays Bank UK plc',
+          citation: '[2023] UKSC 25',
+          paragraph_ref: '115',
+          extract_text:
+            'The bank owed no general duty to protect the customer from the fraud of a third party, because the customer authorised the payments.',
+          proposition: 'No general duty to protect a customer from authorised payment fraud.',
+          checked: true
+        }
+      ];
+      const promptness = promptnessFor({ record, orderId: orderDoc.id, extracts });
+      const gateway = buildGateway({ record, extracts, promptness });
+      const pack = pickParagraphs({ record, gateway, ourPoints: [] });
+
+      const request = buildDraftRequest({
+        documentType: 'Skeleton Argument',
+        briefingNotes:
+          'Self-test skeleton: the application is to set aside the order of Master Brown dated 25 March 2025.',
+        ourSide: OUR_SIDE,
+        court: 'High Court',
+        application: details,
+        order: details.order,
+        orderFound: true,
+        variation,
+        structure: skeletonStructure({ documentType: 'Skeleton Argument', variation }),
+        paragraphs: pack.paragraphs,
+        gateway,
+        savedByIssue: {},
+        promptness,
+        tests: [],
+        extracts,
+        registerItems: [],
+        userStatements: [],
+        supplementary: '',
+        pinned: []
+      });
+
+      const response = await base44.functions.invoke('legalDocumentDraft', request);
+      if (response.data?.error) return fail(`Returned an error: ${response.data.error}`);
+      const content = String(response.data?.content || '');
+      if (!content.trim()) return fail('Returned nothing.');
+
+      const problems = [];
+      if (!/25 March 2025/.test(content) || !/master brown/i.test(content)) {
+        problems.push('the order challenged is not named with its date');
+      }
+      [
+        ['route', /jurisdiction|route|which rule/i],
+        ['gateway', /misstatement|misstated|change of circumstances/i],
+        ['materiality', /materiality|turned on|made a difference|made no difference/i],
+        ['knowable', /knowable|when .{0,30}knew|known/i],
+        ['promptness', /delay|prompt|interval/i],
+        ['finality', /finality|final|appeal/i],
+        ['relief', /relief|set aside|vary/i]
+      ].forEach(([id, pattern]) => {
+        if (!pattern.test(content)) problems.push(`gateway issue ${id} is missing`);
+      });
+      if (!content.includes(`{{DOC:${notice.id}|`)) problems.push('no {{DOC}} reference to the N244');
+      if (!content.includes(`{{DOC:${statement.id}|`)) {
+        problems.push('no {{DOC}} reference to the witness statement');
+      }
+
+      const conflicts = reliefConflicts(content, { variation, order: details.order });
+      if (conflicts.length) {
+        problems.push(`the relief asks to maintain a decision: ${conflicts[0].passage.slice(0, 80)}`);
+      }
+
+      // An authority may only be described from a stored extract, or be left in a marker.
+      const markers = [...content.matchAll(/\[NO EXTRACT:([^\]]*)\]/g)].map((match) => match[1].toLowerCase());
+      const CASE =
+        /\b([A-Z][A-Za-z'’.\-]+(?:\s+[A-Z][A-Za-z'’.\-]+){0,4})\s+v\.?\s+([A-Z][A-Za-z'’.\-]+(?:\s+[A-Z][A-Za-z'’.\-]+){0,4})/g;
+      let hit;
+      while ((hit = CASE.exec(content)) !== null) {
+        const name = `${hit[1]} v ${hit[2]}`.replace(/\s+/g, ' ').trim();
+        if (/Ashfield/i.test(name) || /philipp/i.test(name)) continue;
+        if (markers.some((marker) => marker.includes(hit[1].toLowerCase()))) continue;
+        problems.push(`"${name}" is described without a stored extract`);
+      }
+
+      return problems.length === 0
+        ? pass(
+            `Named ${details.order?.name || 'the order'} (${details.order?.date_text || 'date'}), all seven gateway issues, {{DOC}} references to the N244 and the witness statement, and no request to maintain the decision.`
+          )
+        : fail(problems.join('; '));
     }
   }
 ];

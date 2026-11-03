@@ -69,6 +69,41 @@ export function defaultSourceSelection(documents = []) {
     .filter((row) => row.reason);
 }
 
+function duplicateKey(document = {}) {
+  const name = String(document.file_name || document.name || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  const size =
+    document.char_count !== undefined && document.char_count !== null
+      ? Number(document.char_count)
+      : String(document.text || '').length;
+  return `${name}::${size}`;
+}
+
+// The same document uploaded twice (same name and size) is one document.
+export function dedupeDocuments(documents = []) {
+  const seen = new Map();
+  const unique = [];
+  const duplicates = [];
+  (documents || []).forEach((document) => {
+    const key = duplicateKey(document);
+    const first = seen.get(key);
+    if (first) {
+      duplicates.push({
+        id: document.id,
+        file_name: document.file_name || document.name || 'Document',
+        kept_id: first.id,
+        kept_name: first.file_name || first.name || 'Document'
+      });
+      return;
+    }
+    seen.set(key, document);
+    unique.push(document);
+  });
+  return { unique, duplicates };
+}
+
 // Mapping used when moving uploads that were made elsewhere in the app.
 export function legacyCategory(fileName = '', category = '') {
   if (category === 'Our witness statement' || category === 'Other party witness statement') {

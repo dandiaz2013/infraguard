@@ -36,7 +36,7 @@ export default function CounselReview({ items = [], onFix, busy }) {
                         ? 'Weak passage'
                         : 'Open marker'}
                 </Badge>
-                {item.section_key && (
+                {onFix && (
                   <Button
                     size="sm"
                     variant="outline"

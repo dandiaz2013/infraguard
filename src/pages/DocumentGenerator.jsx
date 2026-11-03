@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { FileText, Loader2, Download, Eye, FolderOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
@@ -15,9 +16,22 @@ import RecordSweepPanel from '@/components/argument/RecordSweepPanel';
 import SourceMaterialPanel from '@/components/documents/SourceMaterialPanel';
 import DraftCitationCheck from '@/components/documents/DraftCitationCheck';
 import DraftList from '@/components/documents/DraftList';
+import ApplicationContextPanel from '@/components/documents/ApplicationContextPanel';
+import ParagraphPackPanel from '@/components/documents/ParagraphPackPanel';
+import CounselReview from '@/components/draft/CounselReview';
 import { buildRecord } from '@/lib/recordIndex';
 import { buildSweeps } from '@/lib/recordFirst';
-import { defaultSourceSelection, toRecordDoc, verifyDraftCitations } from '@/lib/caseFile';
+import { defaultSourceSelection, dedupeDocuments, toRecordDoc } from '@/lib/caseFile';
+import { applicationDetails, documentLabels, isVariation } from '@/lib/applicationContext';
+import { buildDraftRequest, pickParagraphs, skeletonStructure } from '@/lib/documentPack';
+import { checkRows as buildCheckRows, reviewItems } from '@/lib/draftCheck';
+import { buildGateway } from '@/lib/gateway';
+import { promptnessFor } from '@/lib/promptness';
+import { buildRegister } from '@/lib/register';
+import { buildSupplementaryStatement } from '@/lib/supplementaryStatement';
+import { markUserStatement } from '@/lib/fieldStates';
+
+const CHECKED = 'Extract checked against official text';
 
 export default function DocumentGenerator() {
   const [selectedMatter, setSelectedMatter] = useState('');
@@ -27,7 +41,16 @@ export default function DocumentGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
   const [showPreview, setShowPreview] = useState(false);
-  const [loadedArgument, setLoadedArgument] = useState(null);
+  const [loadedArgument, setLoadedArgument] = useState('');
+
+  const [orderId, setOrderId] = useState('');
+  const [applicationSummary, setApplicationSummary] = useState('');
+  const [ourSide, setOurSide] = useState('');
+  const [court, setCourt] = useState('');
+  const [pinned, setPinned] = useState([]);
+  const [includeSupplementary, setIncludeSupplementary] = useState(false);
+  const [modelReview, setModelReview] = useState([]);
+  const [reviewBusy, setReviewBusy] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -65,18 +88,51 @@ export default function DocumentGenerator() {
     enabled: !!selectedMatter
   });
 
+  const { data: issueApproaches = [] } = useQuery({
+    queryKey: ['issueApproaches', selectedMatter],
+    queryFn: () => base44.entities.IssueApproach.filter({ matter_id: selectedMatter }),
+    enabled: !!selectedMatter
+  });
+
+  const { data: legalTests = [] } = useQuery({
+    queryKey: ['legalTests', selectedMatter],
+    queryFn: () => base44.entities.LegalTest.filter({ matter_id: selectedMatter }),
+    enabled: !!selectedMatter
+  });
+
+  const { data: userFields = [] } = useQuery({
+    queryKey: ['userFields', selectedMatter],
+    queryFn: () => base44.entities.UserField.filter({ matter_id: selectedMatter }),
+    enabled: !!selectedMatter
+  });
+
+  const { data: registerAnswers = [] } = useQuery({
+    queryKey: ['registerAnswers', selectedMatter],
+    queryFn: () => base44.entities.RegisterAnswer.filter({ matter_id: selectedMatter }),
+    enabled: !!selectedMatter
+  });
+
+  const { data: gapAnalyses = [] } = useQuery({
+    queryKey: ['gapAnalyses', selectedMatter],
+    queryFn: () => base44.entities.GapAnalysis.filter({ matter_id: selectedMatter }, '-generated_at', 1),
+    enabled: !!selectedMatter
+  });
+
   const [ticked, setTicked] = useState({});
   const [tickedFor, setTickedFor] = useState('');
 
+  // A document uploaded twice (same name and size) is used once.
+  const { unique: fileDocs, duplicates } = React.useMemo(() => dedupeDocuments(caseFileDocs), [caseFileDocs]);
+
   React.useEffect(() => {
-    if (!selectedMatter || selectedMatter === tickedFor || caseFileDocs.length === 0) return;
+    if (!selectedMatter || selectedMatter === tickedFor || fileDocs.length === 0) return;
     const next = {};
-    defaultSourceSelection(caseFileDocs).forEach((row) => {
+    defaultSourceSelection(fileDocs).forEach((row) => {
       next[row.id] = row.reason;
     });
     setTicked(next);
     setTickedFor(selectedMatter);
-  }, [caseFileDocs, selectedMatter, tickedFor]);
+  }, [fileDocs, selectedMatter, tickedFor]);
 
   const toggleSource = (id) => {
     setTicked((previous) => {
@@ -88,21 +144,137 @@ export default function DocumentGenerator() {
   };
 
   const mainAuthorityPool = mainAuthorities.filter((record) => record.is_main === true);
+  const matter = matters.find((entry) => entry.id === selectedMatter) || null;
 
-  const record = React.useMemo(
+  React.useEffect(() => {
+    setOrderId('');
+    setApplicationSummary('');
+    setPinned([]);
+    setOurSide(matter?.our_side || '');
+    setCourt(matter?.court || '');
+  }, [matter?.id]);
+
+  const tickedDocs = React.useMemo(() => fileDocs.filter((document) => ticked[document.id]), [fileDocs, ticked]);
+
+  const record = React.useMemo(() => buildRecord(tickedDocs.map(toRecordDoc)), [tickedDocs]);
+
+  // What the document is for: the application, the order challenged, our side and the court.
+  const details = React.useMemo(
     () =>
-      buildRecord(
-        caseFileDocs.filter((document) => ticked[document.id]).map(toRecordDoc)
-      ),
-    [caseFileDocs, ticked]
+      applicationDetails({
+        documents: fileDocs.map((document) => ({ ...document, ticked: Boolean(ticked[document.id]) })),
+        orderId,
+        summary: applicationSummary
+      }),
+    [fileDocs, ticked, orderId, applicationSummary]
   );
 
-  const citations = React.useMemo(
-    () => verifyDraftCitations(generatedContent, record),
-    [generatedContent, record]
+  React.useEffect(() => {
+    if (!orderId && details.order) setOrderId(details.order.id);
+  }, [details.order, orderId]);
+
+  const variation = React.useMemo(() => isVariation(details), [details]);
+  const order = details.order;
+  const orderFound = Boolean(order) && Boolean(ticked[order.id]);
+
+  const labels = React.useMemo(() => documentLabels(tickedDocs, order?.id || ''), [tickedDocs, order?.id]);
+
+  const checkedExtracts = React.useMemo(
+    () =>
+      authorityExtracts
+        .filter((extract) => (extract.status || CHECKED) === CHECKED)
+        .map((extract) => {
+          const authority = mainAuthorities.find((entry) => entry.id === extract.case_law_id);
+          return {
+            ...extract,
+            case_name: authority?.name || '',
+            citation: authority?.neutral_citation || '',
+          };
+        }),
+    [authorityExtracts, mainAuthorities]
   );
+
+  const promptness = React.useMemo(
+    () => promptnessFor({ record, orderId: order?.id || '', extracts: checkedExtracts }),
+    [record, order?.id, checkedExtracts]
+  );
+
+  const gateway = React.useMemo(
+    () => buildGateway({ record, extracts: checkedExtracts, promptness }),
+    [record, checkedExtracts, promptness]
+  );
+
+  const savedByIssue = React.useMemo(
+    () =>
+      (issueApproaches || []).reduce((acc, row) => {
+        const current = acc[row.issue_id];
+        if (!current || String(row.saved_at || '') > String(current.saved_at || '')) acc[row.issue_id] = row;
+        return acc;
+      }, {}),
+    [issueApproaches]
+  );
+
+  const confirmedTests = React.useMemo(
+    () =>
+      (legalTests || []).filter(
+        (test) =>
+          test.status === 'Confirmed by user' &&
+          test.usage !== 'Background: tests applied in the earlier decision'
+      ),
+    [legalTests]
+  );
+
+  const pack = React.useMemo(
+    () =>
+      pickParagraphs({
+        record,
+        gateway,
+        ourPoints: loadedArgument?.our_points || [],
+        pinned,
+      }),
+    [record, gateway, loadedArgument, pinned]
+  );
+
+  const userStatements = React.useMemo(
+    () =>
+      (userFields || [])
+        .filter((field) => String(field.text || '').trim())
+        .map((field) => ({ text: markUserStatement(field.text) })),
+    [userFields]
+  );
+
+  const register = React.useMemo(() => {
+    const answers = (registerAnswers || []).reduce((acc, row) => {
+      acc[row.item_id] = row;
+      return acc;
+    }, {});
+    return buildRegister({ record, tests: confirmedTests, answers });
+  }, [record, confirmedTests, registerAnswers]);
+
+  const supplementary = React.useMemo(() => {
+    if (!includeSupplementary) return '';
+    const gap = (gapAnalyses || [])[0];
+    return buildSupplementaryStatement({
+      factList: gap?.fact_list || [],
+      matterName: matter?.matter_name || '',
+      court,
+    }).text;
+  }, [includeSupplementary, gapAnalyses, matter, court]);
 
   const sweeps = React.useMemo(() => buildSweeps(record, []), [record]);
+
+  const checks = React.useMemo(
+    () => (generatedContent ? buildCheckRows(generatedContent, tickedDocs, checkedExtracts) : []),
+    [generatedContent, tickedDocs, checkedExtracts]
+  );
+
+  const review = React.useMemo(
+    () =>
+      generatedContent
+        ? [...modelReview, ...reviewItems(generatedContent, tickedDocs, checkedExtracts, { variation, order })]
+        : [],
+    [generatedContent, modelReview, tickedDocs, checkedExtracts, variation, order]
+  );
 
   const { data: latestArgument } = useQuery({
     queryKey: ['latest-argument', selectedMatter],
@@ -130,78 +302,122 @@ export default function DocumentGenerator() {
     }
   });
 
+  const runCounselReview = async (content) => {
+    setReviewBusy(true);
+    try {
+      const response = await base44.functions.invoke('argumentSections', {
+        mode: 'review',
+        draft: content,
+        court,
+        position: ourSide,
+        record_paragraphs: pack.paragraphs,
+        extracts: checkedExtracts,
+      });
+      const passages = (response.data?.passages || []).map((passage) => ({
+        kind: 'weak',
+        passage: passage.passage,
+        problem: passage.problem,
+        fix: passage.fix,
+        section: 'Counsel',
+      }));
+      setModelReview(passages);
+    } catch (error) {
+      setModelReview([]);
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!documentType || !briefingNotes.trim()) {
       alert('Please select document type and provide briefing notes');
+      return;
+    }
+    if (!selectedMatter) {
+      alert('Please select a matter');
       return;
     }
 
     setIsGenerating(true);
     setGeneratedContent('');
     setShowPreview(false);
+    setModelReview([]);
 
     try {
-      const response = await base44.functions.invoke('legalDocumentDraft', {
+      const request = buildDraftRequest({
         documentType,
         briefingNotes,
-        argument: loadedArgument ? {
-          version_number: loadedArgument.version_number,
-          argument_title: loadedArgument.argument_title,
-          position: loadedArgument.position,
-          court: loadedArgument.court,
-          fact_pattern: loadedArgument.fact_pattern,
-          argument_text: loadedArgument.argument_text
-        } : null,
-        authorities: authorities.map(a => ({
-          title: a.title,
-          citation: a.citation,
-          legal_principle: a.legal_principle,
-          relevance: a.relevance
-        })),
-        record_documents: record.documents.map((doc) => ({
+        ourSide,
+        court,
+        application: details,
+        order,
+        orderFound,
+        variation,
+        structure: skeletonStructure({ documentType, variation }),
+        paragraphs: pack.paragraphs,
+        gateway,
+        savedByIssue,
+        promptness,
+        tests: confirmedTests,
+        extracts: checkedExtracts,
+        registerItems: register.items,
+        userStatements,
+        supplementary,
+        pinned,
+        argument: loadedArgument
+          ? {
+              version_number: loadedArgument.version_number,
+              argument_title: loadedArgument.argument_title,
+              position: loadedArgument.position,
+              court: loadedArgument.court,
+              fact_pattern: loadedArgument.fact_pattern,
+              argument_text: loadedArgument.argument_text,
+            }
+          : null,
+        recordDocuments: record.documents.map((doc) => ({
           name: doc.name,
           role: doc.role,
           record_status: doc.record_status,
           filed_date: doc.filed_date || '',
-          provisions: doc.law_items.map((item) => `${item.label} (${item.ref})`)
         })),
-        record_findings: sweeps.court_found.slice(0, 20).map((row) => ({
-          document_name: row.document_name,
-          ref: row.ref,
-          quote: row.quote
-        })),
-        source_material: caseFileDocs
-          .filter((document) => ticked[document.id])
-          .map((document) => ({
-            name: document.file_name,
-            category: document.category,
-            party: document.party || '',
-            date: document.document_date || '',
-            reason: ticked[document.id]
-          })),
-        main_authorities: mainAuthorityPool.map((record) => ({
-          name: record.name,
-          citation: record.neutral_citation || '',
-          court: record.court || '',
-          year: record.year || null,
-          official_url: record.official_url || record.url || '',
-          checked: record.check_status === 'Extract checked against official text',
+        mainAuthorities: mainAuthorityPool.map((authority) => ({
+          name: authority.name,
+          citation: authority.neutral_citation || '',
+          court: authority.court || '',
+          year: authority.year || null,
+          official_url: authority.official_url || authority.url || '',
+          checked: authority.check_status === CHECKED,
           extracts: authorityExtracts
-            .filter((extract) => extract.case_law_id === record.id)
+            .filter((extract) => extract.case_law_id === authority.id)
             .map((extract) => ({
               paragraph_ref: extract.paragraph_ref,
               extract_text: extract.extract_text,
               proposition: extract.proposition || '',
               status: extract.status || '',
             })),
-        }))
+        })),
+        authorities: authorities.map((authority) => ({
+          title: authority.title,
+          citation: authority.citation,
+        })),
       });
 
+      request.source_material = tickedDocs.map((document) => ({
+        name: document.file_name,
+        category: document.category,
+        party: document.party || '',
+        date: document.document_date || '',
+        reason: ticked[document.id],
+      }));
+
+      const response = await base44.functions.invoke('legalDocumentDraft', request);
+      if (response.data?.error) throw new Error(response.data.error);
       setGeneratedContent(response.data.content);
       setShowPreview(true);
+      runCounselReview(response.data.content);
     } catch (error) {
       console.error('Generation error:', error);
-      alert('Document generation failed. Please try again.');
+      alert(`Document generation failed: ${error.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -222,13 +438,24 @@ export default function DocumentGenerator() {
     });
   };
 
+  // The fix button puts the suggested wording on the clipboard, ready to paste into the draft.
+  const handleFix = async (item) => {
+    if (!item?.fix) return;
+    try {
+      await navigator.clipboard.writeText(item.fix);
+      alert('The suggested fix is on your clipboard.');
+    } catch (error) {
+      alert(item.fix);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 mb-2">Document Generator</h1>
-            <p className="text-slate-600">Generate professional UK legal documents with AI assistance</p>
+            <p className="text-slate-600">Drafted from the Argument Builder work and the text of the ticked documents</p>
           </div>
           <Link
             to="/CaseFileLibrary"
@@ -237,6 +464,39 @@ export default function DocumentGenerator() {
             <FolderOpen className="h-4 w-4" />
             Open Case File Library
           </Link>
+        </div>
+
+        <div className="mb-6">
+          <div className="mb-3">
+            <Label htmlFor="matter">Matter *</Label>
+            <Select value={selectedMatter} onValueChange={setSelectedMatter}>
+              <SelectTrigger className="max-w-md">
+                <SelectValue placeholder="Select matter..." />
+              </SelectTrigger>
+              <SelectContent>
+                {matters.map((entry) => (
+                  <SelectItem key={entry.id} value={entry.id}>
+                    {entry.matter_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedMatter && (
+            <ApplicationContextPanel
+              details={details}
+              orderId={orderId}
+              onOrderChange={setOrderId}
+              application={applicationSummary || (details.application || '')}
+              onApplicationChange={setApplicationSummary}
+              ourSide={ourSide}
+              onSideChange={setOurSide}
+              court={court}
+              onCourtChange={setCourt}
+              orderFound={orderFound}
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -249,22 +509,6 @@ export default function DocumentGenerator() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="matter">Matter *</Label>
-                <Select value={selectedMatter} onValueChange={setSelectedMatter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select matter..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {matters.map((matter) => (
-                      <SelectItem key={matter.id} value={matter.id}>
-                        {matter.matter_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div>
                 <Label htmlFor="docType">Document Type *</Label>
                 <Select value={documentType} onValueChange={setDocumentType}>
@@ -308,23 +552,42 @@ export default function DocumentGenerator() {
                 <Label htmlFor="briefing">Briefing Notes *</Label>
                 <Textarea
                   id="briefing"
-                  placeholder="Provide detailed instructions, facts, and specific points to include in the document. The saved argument will be automatically incorporated."
+                  placeholder="Anything the model must know that is not in the record. The application, the order challenged, the gateway issues and the paragraphs of the ticked documents are added automatically."
                   value={briefingNotes}
                   onChange={(e) => setBriefingNotes(e.target.value)}
-                  rows={12}
+                  rows={8}
                   className="font-mono text-sm"
                 />
               </div>
 
-              {selectedMatter && authorities.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm text-blue-900 font-medium">
-                    ✓ {authorities.length} legal {authorities.length === 1 ? 'authority' : 'authorities'} will be included
-                  </p>
-                </div>
-              )}
+              <label className="flex items-start gap-2 text-xs text-slate-700">
+                <Checkbox
+                  checked={includeSupplementary}
+                  onCheckedChange={setIncludeSupplementary}
+                  className="mt-0.5"
+                />
+                Include the supplementary witness statement draft (from the gap analysis fact list)
+              </label>
 
-              <Button 
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 space-y-1">
+                <p>
+                  {pack.count} paragraph{pack.count === 1 ? '' : 's'} of the ticked documents go with this draft in
+                  full ({(pack.chars || 0).toLocaleString()} characters), each with its document id and paragraph number.
+                </p>
+                <p>
+                  {gateway.length} gateway issues, {confirmedTests.length} confirmed test
+                  {confirmedTests.length === 1 ? '' : 's'}, {checkedExtracts.length} checked extract
+                  {checkedExtracts.length === 1 ? '' : 's'}, {register.summary.unresolved} open register item
+                  {register.summary.unresolved === 1 ? '' : 's'}.
+                </p>
+                <p>
+                  {order
+                    ? `Order challenged: ${order.name}${order.date_text ? `, ${order.date_text}` : ''}${orderFound ? '' : ' (not ticked — quotes blocked)'}`
+                    : 'No order challenged is in the case file yet.'}
+                </p>
+              </div>
+
+              <Button
                 onClick={handleGenerate}
                 disabled={isGenerating || !documentType || !briefingNotes.trim()}
                 className="w-full bg-green-600 hover:bg-green-700"
@@ -380,14 +643,28 @@ export default function DocumentGenerator() {
 
         {selectedMatter && (
           <div className="mt-6 space-y-6">
-            <SourceMaterialPanel documents={caseFileDocs} ticked={ticked} onToggle={toggleSource} />
+            {duplicates.length > 0 && (
+              <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {duplicates.length} duplicate document{duplicates.length === 1 ? '' : 's'} ignored (same name and
+                size): {duplicates.map((row) => row.file_name).join(', ')} — {duplicates[0].kept_name} is used.
+              </p>
+            )}
+            <SourceMaterialPanel documents={fileDocs} ticked={ticked} onToggle={toggleSource} />
+            <ParagraphPackPanel
+              pack={pack}
+              record={record}
+              pinned={pinned}
+              onPin={(row) => setPinned((previous) => [...previous.filter((entry) => entry.ref !== row.ref || entry.document_name !== row.document_name), row])}
+              onUnpin={(row) => setPinned((previous) => previous.filter((entry) => !(entry.ref === row.ref && entry.document_name === row.document_name)))}
+            />
             <DraftList matterId={selectedMatter} />
           </div>
         )}
 
         {generatedContent && (
           <div className="mt-6 space-y-6">
-            <DraftCitationCheck rows={citations} />
+            <DraftCitationCheck rows={checks} />
+            <CounselReview items={review} onFix={handleFix} busy={reviewBusy} />
             <ExtractCheckPanel
               text={generatedContent}
               extracts={authorityExtracts.filter((extract) =>
