@@ -583,7 +583,7 @@ export default function DocumentGenerator() {
                 <p>
                   {order
                     ? `Order challenged: ${order.name}${order.date_text ? `, ${order.date_text}` : ''}${orderFound ? '' : ' (not ticked — quotes blocked)'}`
-                    : 'No order challenged is in the case file yet.'}
+                    : 'No order challenged chosen yet — quotes from the order challenged are blocked.'}
                 </p>
               </div>
 

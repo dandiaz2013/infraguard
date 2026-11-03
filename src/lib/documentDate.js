@@ -105,6 +105,51 @@ function signatureDate(text) {
   );
 }
 
+// The heading lines an order or a judgment is dated by. A date inside a later
+// sentence ("the order of Master Brown dated 25th March 2024") is a reference to
+// another document and is never used.
+const HEADING_START = '^[ \\t*_#]{0,10}(?:\\d{1,2}[.)][ \\t*]{0,4})?';
+const HEADING_WORDS = {
+  Orders: [
+    'dated',
+    'date\\s*:',
+    'date of order',
+    'order\\s+(?:dated|made on)',
+    'order made on',
+    'made on',
+    'sitting on',
+    'handed down',
+    'before'
+  ],
+  Judgments: [
+    'dated',
+    'date\\s*:',
+    'date of judgment',
+    'judgment date',
+    'judgment\\s+dated',
+    'handed down',
+    'delivered',
+    'given\\s+on',
+    'approved',
+    'sitting on',
+    'before'
+  ]
+};
+
+function headingDate(text, keywords) {
+  const lines = String(text || '').split('\n');
+  const head = lines.slice(0, 24);
+  const foot = lines.slice(Math.max(24, lines.length - 20));
+  const pattern = new RegExp(`${HEADING_START}(?:${keywords.join('|')})(?![a-z])`, 'i');
+  for (const line of [...head, ...foot]) {
+    if (!line.trim()) continue;
+    if (!pattern.test(line)) continue;
+    const value = toIsoDate(line);
+    if (value) return value;
+  }
+  return '';
+}
+
 // Returns the date and where it was read from, so the user can confirm or change it.
 export function detectDocumentDate(text = '', category = '') {
   const body = String(text || '');
@@ -121,30 +166,16 @@ export function detectDocumentDate(text = '', category = '') {
     return { date: '', source: 'no date on the stamp, statement of truth or signature' };
   }
 
+  // A judgment or an order is dated by the heading lines above only - never by a
+  // date in the body, and never by its reference to another order.
+  if (category === 'Judgments' || category === 'Orders') {
+    const heading = headingDate(body, HEADING_WORDS[category]);
+    if (heading) {
+      return { date: heading, source: category === 'Judgments' ? 'judgment date' : 'order date' };
+    }
+  }
+
   const anchors = [];
-  if (category === 'Judgments') {
-    // The heading line only: "Handed down", "Dated", "Before ... sitting on".
-    anchors.push([
-      /(?:handed down|delivered|given|approved|sitting on|judgment date|date of judgment)[^\n.]{0,120}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i,
-      'judgment date'
-    ]);
-    anchors.push([
-      /(?:handed down|delivered|approved|sitting on)[^\n]{0,40}?(\b\d{1,2}\/\d{1,2}\/\d{4}\b)/i,
-      'judgment date'
-    ]);
-    anchors.push([/(?:^|\n)\s*(?:Date|Dated)\s*:\s*([^\n]{6,30})/, 'judgment date']);
-  }
-  if (category === 'Orders') {
-    // The order's own date line only, never a later order mentioned in the body.
-    anchors.push([
-      /(?:DATED|dated|Date of order|Made on|MADE ON|order made on)[^\n.]{0,60}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/,
-      'order date'
-    ]);
-    anchors.push([
-      /(?:made|sealed|issued|dated)\s*(?:on)?\s*:?\s*(\b\d{1,2}\/\d{1,2}\/\d{4}\b)/i,
-      'order date'
-    ]);
-  }
   if (category === 'Correspondence') {
     anchors.push([/^\s*(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/m, 'letter date']);
     anchors.push([/(?:^|\n)\s*date:\s*([^\n]{4,30})/i, 'letter date']);

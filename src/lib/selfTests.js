@@ -23,6 +23,10 @@ import { buildGateway } from '@/lib/gateway';
 import { findTestMatter } from '@/lib/testMatter';
 import {
   N244_TEXT,
+  PERMISSION_ORDER_TEXT,
+  EADY_ORDER_TEXT,
+  EADY_JUDGMENT_TEXT,
+  EADY_N244_TEXT,
   CLAIMANT_WS_TEXT,
   DEFENDANT_WS_TEXT,
   TRANSCRIPT_TEXT,
@@ -308,6 +312,65 @@ export const MODULE_TESTS = [
       return !found.date && label === 'Date not found - enter it'
         ? pass('No date taken from the body; the user is asked to enter it.')
         : fail(`Read "${found.date || label}" instead of asking for the date.`);
+    }
+  },
+  {
+    id: 'date-order-heading-only',
+    module: 'documentDate',
+    label: 'An order is dated from its heading, never from a date in a later sentence',
+    run: () => {
+      const found = detectDocumentDate(PERMISSION_ORDER_TEXT, 'Orders');
+      return found.date === '2024-08-13'
+        ? pass(`Read 13 August 2024 from the ${found.source}, ignoring the order of Master Brown dated 25 March 2024 in the body.`)
+        : fail(`Read ${found.date || 'nothing'} from the ${found.source} instead of 2024-08-13.`);
+    }
+  },
+  {
+    id: 'order-challenged-by-judge',
+    module: 'applicationContext',
+    label: 'The N244 resolves to the order of Mrs Justice Eady of 25 March 2025, not the first decision in the list',
+    run: () => {
+      const documents = [
+        { id: 'permission', file_name: 'Permission order.txt', category: 'Orders', text: PERMISSION_ORDER_TEXT },
+        { id: 'judgment', file_name: 'Judgment of Eady J.txt', category: 'Judgments', text: EADY_JUDGMENT_TEXT },
+        { id: 'order', file_name: 'Order of Eady J.txt', category: 'Orders', text: EADY_ORDER_TEXT },
+        { id: 'n244', file_name: 'N244 continuation sheet.txt', category: 'Application notices', text: EADY_N244_TEXT }
+      ];
+      const details = applicationDetails({ documents });
+      const ok =
+        details.order?.id === 'order' &&
+        details.order?.date === '2025-03-25' &&
+        /eady/i.test(details.namedJudge) &&
+        details.suggested === null;
+      return ok
+        ? pass(
+            `Named “${details.named}”; matched ${details.order?.name} (${details.order?.date_text}) on the date and on ${details.namedJudge}.`
+          )
+        : fail(
+            `Matched ${details.order?.name || 'nothing'} (${details.order?.date_text || 'no date'}), judge read as “${details.namedJudge || 'none'}”.`
+          );
+    }
+  },
+  {
+    id: 'order-missing-judgment-offered',
+    module: 'applicationContext',
+    label: 'With only the judgment in the file, it is offered and nothing is labelled the order challenged',
+    run: () => {
+      const documents = [
+        { id: 'judgment', file_name: 'Judgment of Eady J.txt', category: 'Judgments', text: EADY_JUDGMENT_TEXT },
+        { id: 'n244', file_name: 'N244 continuation sheet.txt', category: 'Application notices', text: EADY_N244_TEXT }
+      ];
+      const details = applicationDetails({ documents });
+      const ok =
+        !details.order &&
+        details.suggested?.id === 'judgment' &&
+        /upload the order as well/i.test(details.suggested.note || '') &&
+        details.namedOrderMissing;
+      return ok
+        ? pass(`Nothing labelled the order challenged; the judgment of 25 March 2025 is offered: “${details.suggested.note}”.`)
+        : fail(
+            `Order ${details.order?.name || 'not chosen'}; offered ${details.suggested?.id || 'nothing'}${details.suggested?.note ? ` (“${details.suggested.note}”)` : ''}.`
+          );
     }
   },
   {

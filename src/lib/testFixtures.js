@@ -142,6 +142,72 @@ export const CASE_LAW_TEXT = [
   'Philipp v Barclays Bank UK plc [2023] 3 WLR 456.'
 ].join('\n');
 
+// The order challenged: dated by its heading ("Sitting on") and its foot line.
+export const EADY_ORDER_TEXT = [
+  'IN THE HIGH COURT OF JUSTICE',
+  'BUSINESS AND PROPERTY COURTS OF ENGLAND AND WALES',
+  'CHANCERY DIVISION',
+  'Case No. CH-2024-000123',
+  'BROWN v ASHFIELD HOLDINGS LIMITED',
+  '',
+  'ORDER',
+  '',
+  'BEFORE Mrs Justice Eady',
+  'Sitting on 25 March 2025',
+  '',
+  'UPON the application of the Defendant',
+  'IT IS ORDERED that:',
+  '1. The post-notification retrieval claim is dismissed.',
+  '2. The Claimant pays the Defendant costs, to be assessed if not agreed.',
+  '',
+  'DATED 25 March 2025'
+].join('\n');
+
+// An earlier permission order: its own date is on the heading and the foot line, and
+// the date inside its first paragraph is a reference to a different order.
+export const PERMISSION_ORDER_TEXT = [
+  'IN THE COURT OF APPEAL (CIVIL DIVISION)',
+  'BROWN v ASHFIELD HOLDINGS LIMITED',
+  'Case No. CH-2024-000123',
+  '',
+  'ORDER',
+  '',
+  "UPON the Claimant's application dated 12 July 2024",
+  'IT IS ORDERED that:',
+  '1. The Claimant has permission to appeal the Order of Master Brown dated 25th March 2024.',
+  '2. The appeal is listed for hearing on a date to be fixed.',
+  '',
+  'DATED 13 August 2024'
+].join('\n');
+
+// The judgment of the same date and judge, where the order itself is not in the file.
+export const EADY_JUDGMENT_TEXT = [
+  'IN THE HIGH COURT OF JUSTICE',
+  'BUSINESS AND PROPERTY COURTS OF ENGLAND AND WALES',
+  'CHANCERY DIVISION',
+  '[2025] EWHC 640 (Ch)',
+  'BROWN v ASHFIELD HOLDINGS LIMITED',
+  'Approved Judgment',
+  'Before Mrs Justice Eady',
+  'Handed down on 25 March 2025',
+  '',
+  '46. There was no regulatory requirement for the defendant to operate the scheme.',
+  '58. Nothing in this judgment affects the order of Master Brown dated 25th March 2024.'
+].join('\n');
+
+export const EADY_N244_TEXT = [
+  'N244 Application notice',
+  'Continuation sheet',
+  'Case No. CH-2024-000123',
+  '',
+  'The Claimant applies under CPR 3.1(7) to vary or revoke the order of Mrs Justice Eady dated 25 March 2025, insofar as it finally disposed of the post-notification retrieval claim.',
+  '',
+  '1. The order was made without notice to the Claimant, who was unrepresented.',
+  '2. The Claimant first saw the transcript on 3 August 2026.',
+  '',
+  'Issued on 19 August 2026'
+].join('\n');
+
 // Party left blank where the document must be detected rather than assumed.
 export const TEST_DOCUMENTS = [
   { file_name: 'Judgment - Brown v Ashfield Holdings Limited.txt', category: 'Judgments', party: 'Court', text: JUDGMENT_TEXT },
