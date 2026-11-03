@@ -275,23 +275,6 @@ export default function ArgumentBuilder() {
     [gateway, savedByIssue]
   );
 
-  const fieldGroups = useMemo(
-    () =>
-      buildFieldGroups({
-        record,
-        gateway,
-        ourPoints,
-        clauses,
-        misstatements,
-        chronology: chronologyData,
-        expansions: { disputed_facts: disputedFacts, undisputed_facts: undisputedFacts, chronology },
-        userFields: userFieldMap
-      }),
-    [record, gateway, ourPoints, clauses, misstatements, chronologyData, disputedFacts, undisputedFacts, chronology, userFieldMap]
-  );
-
-  const userStatements = useMemo(() => userStatementLines(fieldGroups), [fieldGroups]);
-
   const saveField = async (field, payload) => {
     const existing = userFieldMap[field.key];
     const data = {
@@ -663,6 +646,23 @@ export default function ArgumentBuilder() {
     setters: { setOurPoints, setClauses, setMisstatements, setFactPattern, setChronology, setLossHarmRisk },
     setGeneratedArgument
   });
+
+  const fieldGroups = useMemo(
+    () =>
+      buildFieldGroups({
+        record,
+        gateway,
+        ourPoints,
+        clauses,
+        misstatements,
+        chronology: chronologyData,
+        expansions: { disputed_facts: disputedFacts, undisputed_facts: undisputedFacts, chronology },
+        userFields: userFieldMap
+      }),
+    [record, gateway, ourPoints, clauses, misstatements, chronologyData, disputedFacts, undisputedFacts, chronology, userFieldMap]
+  );
+
+  const userStatements = useMemo(() => userStatementLines(fieldGroups), [fieldGroups]);
 
   const brief = useMemo(
     () => buildCaseBrief({ matter: currentMatter, gateway: ratedGateway, promptness, missingDocs, dismissed: dismissedDocs, ourPoints }),
