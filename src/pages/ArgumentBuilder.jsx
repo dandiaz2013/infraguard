@@ -326,13 +326,17 @@ export default function ArgumentBuilder() {
         });
         if (extractResponse.data?.error) throw new Error(extractResponse.data.error);
         const text = extractResponse.data?.text || '';
-        const verdict = classifyDocument({ file_name: file.name, text });
+        const matterSide = (matters || []).find((entry) => entry.id === selectedMatter)?.our_side || '';
+        const verdict = classifyDocument({ file_name: file.name, text, our_side: matterSide });
+        const detected = dateFromDocument(text, verdict.category);
         await base44.entities.CaseFileDocument.create({
           matter_id: selectedMatter,
           file_name: file.name,
           category: verdict.category,
-          party: verdict.party,
-          document_date: dateFromDocument(text, verdict.category),
+          party: verdict.party || undefined,
+          party_reason: verdict.party_reason,
+          detected_date: detected,
+          document_date: detected,
           record_status: 'Filed or served',
           file_uri: extractResponse.data?.file_uri || '',
           text: text.slice(0, 120000),

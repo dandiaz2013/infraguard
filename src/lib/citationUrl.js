@@ -17,8 +17,9 @@ const DIVISION_CODES = {
 
 export function buildCaseLink(citation) {
   if (!citation) return '';
-  const text = String(citation).replace(/\s+/g, ' ').trim();
-  const match = text.match(/^\[(\d{4})\]\s+(UKSC|UKPC|EWCA\s+Civ|EWCA\s+Crim|EWHC)\s+(\d+)(?:\s*\(([A-Za-z]+)\))?$/i);
+  // A trailing full stop is punctuation, not part of the citation.
+  const text = String(citation).replace(/\s+/g, ' ').trim().replace(/[.,;]+$/, '');
+  const match = text.match(/^\[(\d{4})\]\s+(UKSC|UKHL|UKPC|EWCA\s+Civ|EWCA\s+Crim|EWHC)\s+(\d+)(?:\s*\(?([A-Za-z]+)\)?)?$/i);
   if (!match) return '';
 
   const year = match[1];
@@ -28,6 +29,7 @@ export function buildCaseLink(citation) {
   const base = 'https://caselaw.nationalarchives.gov.uk';
 
   if (code === 'UKSC') return `${base}/uksc/${year}/${number}`;
+  if (code === 'UKHL') return `${base}/ukhl/${year}/${number}`;
   if (code === 'UKPC') return `${base}/ukpc/${year}/${number}`;
   if (code === 'EWCA CIV') return `${base}/ewca/civ/${year}/${number}`;
   if (code === 'EWCA CRIM') return `${base}/ewca/crim/${year}/${number}`;

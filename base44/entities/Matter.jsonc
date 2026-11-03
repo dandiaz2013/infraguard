@@ -32,6 +32,17 @@
       "type": "string",
       "description": "Court or tribunal"
     },
+    "our_side": {
+      "type": "string",
+      "enum": [
+        "Claimant",
+        "Defendant",
+        "Appellant",
+        "Respondent",
+        "Applicant"
+      ],
+      "description": "Which side this matter acts for; used to read a document's party from its text"
+    },
     "status": {
       "type": "string",
       "enum": [

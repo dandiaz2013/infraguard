@@ -33,12 +33,35 @@
         "Other side",
         "Court"
       ],
-      "description": "Who the document comes from"
+      "description": "Who the document comes from, confirmed by the user at upload"
+    },
+    "party_confirmed": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the user has confirmed which side the document comes from"
+    },
+    "party_reason": {
+      "type": "string",
+      "description": "Why the party was detected, e.g. the wording the document uses"
     },
     "document_date": {
       "type": "string",
       "format": "date",
       "description": "Date of the document or of filing"
+    },
+    "detected_date": {
+      "type": "string",
+      "description": "Date read from the issue stamp, statement of truth, signature line or order"
+    },
+    "confirmed_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date confirmed or entered by the user; the only date used for promptness"
+    },
+    "date_confirmed": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the user has confirmed the detected date or entered their own"
     },
     "case_number": {
       "type": "string",

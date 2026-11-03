@@ -29,19 +29,25 @@ export function bandForScore(score) {
   return 'Poor';
 }
 
+// An unanswered question scores nothing and is labelled "Not answered".
+export const NOT_ANSWERED = 'Not answered';
+
 export function pointsForAnswer(answer, points) {
   if (answer === 'Yes') return points;
   if (answer === 'No') return 0;
-  return Math.round(points / 2);
+  if (answer === 'Unsure') return Math.round(points / 2);
+  return 0;
 }
 
 export function computeMerits({ answers = {}, usages = [], caseLawById = {} } = {}) {
   const questions = TRIAGE_QUESTIONS.map((question) => {
-    const answer = ANSWER_OPTIONS.includes(answers[question.id]) ? answers[question.id] : 'Unsure';
+    const answered = ANSWER_OPTIONS.includes(answers[question.id]);
+    const answer = answered ? answers[question.id] : NOT_ANSWERED;
     return {
       id: question.id,
       label: question.label,
       answer,
+      answered,
       max: question.points,
       points: pointsForAnswer(answer, question.points),
     };
@@ -88,6 +94,8 @@ export function computeMerits({ answers = {}, usages = [], caseLawById = {} } = 
     },
     total,
     band: bandForScore(total),
+    answered_count: questions.filter((question) => question.answered).length,
+    unanswered_count: questions.filter((question) => !question.answered).length,
   };
 }
 

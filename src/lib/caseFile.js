@@ -35,6 +35,8 @@ export function toRecordDoc(document = {}) {
     record_status: document.record_status || 'Filed or served',
     filed_by: PARTY_TO_FILED_BY[document.party] || document.filed_by || '',
     filed_date: document.document_date || document.filed_date || '',
+    confirmed_date: document.confirmed_date || document.document_date || '',
+    date_confirmed: document.date_confirmed,
     exhibit_of: document.exhibit_of || '',
   };
 }

@@ -1,41 +1,59 @@
 // Deterministic citation parser: regular expressions and string offsets only, no AI.
+// Party names keep Ltd, plc and brackets; a pinpoint must sit in the same sentence as
+// the case it follows; law report citations are recorded without an automatic link.
 
-const CITATION_SOURCE = '\\[\\d{4}\\]\\s+(UKSC|UKPC|EWCA\\s+Civ|EWCA\\s+Crim|EWHC)\\s+\\d+(\\s+\\([A-Za-z]+\\))?';
+const DIVISION_WORDS = ['Ch', 'Comm', 'TCC', 'Admin', 'KB', 'QB', 'IPEC', 'Fam', 'Pat', 'Admlty', 'Costs'];
+const DIVISION_SRC = `(?:\\s*\\(?(${DIVISION_WORDS.join('|')})\\)?)?`;
 
-const COURT_BY_CODE = {
+const CITATION_SOURCE = `\\[\\d{4}\\]\\s+(UKSC|UKHL|UKPC|EWCA\\s+Civ|EWCA\\s+Crim|EWHC)\\s+\\d+${DIVISION_SRC}`;
+
+const LAW_REPORT_ABBREV = [
+  'All ER', 'WLR', 'AC', 'QB', 'Ch', 'Fam', 'Cr App R', "Lloyd's Rep", 'BCLC',
+  'P&CR', 'ICR', 'IRLR', 'FLR', 'STC', 'TC', 'Costs LR', 'Env LR', 'LGR'
+];
+const LAW_REPORT_SOURCE = `\\[\\d{4}\\]\\s+(?:\\d{1,3}\\s+)?(?:${LAW_REPORT_ABBREV.join('|')})\\s+\\d{1,5}`;
+
+export const LAW_REPORT_STATUS = 'Law report citation, no automatic link';
+
+const COURT_BY_CODE: Record<string, string> = {
   UKSC: 'Supreme Court',
+  UKHL: 'House of Lords',
   UKPC: 'Privy Council',
   'EWCA Civ': 'Court of Appeal (Civil Division)',
   'EWCA Crim': 'Court of Appeal (Criminal Division)',
   EWHC: 'High Court',
 };
 
-const DIVISION_CODES = {
-  ch: 'ch',
-  comm: 'comm',
-  tcc: 'tcc',
-  admin: 'admin',
-  kb: 'kb',
-  qb: 'qb',
-  ipec: 'ipec',
-  fam: 'fam',
-  pat: 'pat',
-  admlty: 'admlty',
-  costs: 'costs',
+const DIVISION_CODES: Record<string, string> = {
+  ch: 'ch', comm: 'comm', tcc: 'tcc', admin: 'admin', kb: 'kb', qb: 'qb',
+  ipec: 'ipec', fam: 'fam', pat: 'pat', admlty: 'admlty', costs: 'costs',
 };
 
-const STOP_OPENERS = ['The', 'This', 'That', 'It', 'In', 'As', 'If', 'Where', 'When'];
+const STOP_OPENERS = [
+  'The', 'This', 'That', 'It', 'In', 'As', 'If', 'Where', 'When', 'See', 'Also',
+  'Cf', 'But', 'And', 'However', 'Following', 'Per', 'Relying', 'Applying', 'Compare', 'Eg'
+];
 export const MAX_CANDIDATES = 300;
 
 const WORD_RE = /^[A-Z][A-Za-z'’&.\-]*$/;
+const CORP_RE = /^(?:Ltd|Limited|plc|PLC|LLP|Inc|Co|Group|Holdings|SA|NV|GmbH|Bros|&)$/;
+const BRACKET_RE = /^\([A-Za-z&.'’\-]{1,12}\)$/;
 
-function normaliseSpace(value) {
+function normaliseSpace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-export function findCitations(text) {
+function isStop(word: string): boolean {
+  return STOP_OPENERS.some((entry) => entry.toLowerCase() === String(word).toLowerCase());
+}
+
+function isNameWord(word: string): boolean {
+  return WORD_RE.test(word) || CORP_RE.test(word) || BRACKET_RE.test(word);
+}
+
+export function findCitations(text: string) {
   const pattern = new RegExp(CITATION_SOURCE, 'g');
-  const found = [];
+  const found: { citation: string; index: number; end: number }[] = [];
   let match;
   while ((match = pattern.exec(text)) !== null) {
     const citation = normaliseSpace(match[0]);
@@ -44,9 +62,20 @@ export function findCitations(text) {
   return found;
 }
 
-export function courtFor(citation) {
+export function findLawReportCitations(text: string) {
+  const pattern = new RegExp(LAW_REPORT_SOURCE, 'g');
+  const found: { citation: string; index: number; end: number }[] = [];
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    found.push({ citation: normaliseSpace(match[0]), index: match.index, end: match.index + match[0].length });
+  }
+  return found;
+}
+
+export function courtFor(citation: string): string {
   const upper = citation.toUpperCase();
   if (upper.includes('UKSC')) return COURT_BY_CODE.UKSC;
+  if (upper.includes('UKHL')) return COURT_BY_CODE.UKHL;
   if (upper.includes('UKPC')) return COURT_BY_CODE.UKPC;
   if (upper.includes('EWCA CIV')) return COURT_BY_CODE['EWCA Civ'];
   if (upper.includes('EWCA CRIM')) return COURT_BY_CODE['EWCA Crim'];
@@ -54,16 +83,16 @@ export function courtFor(citation) {
   return '';
 }
 
-export function yearFor(citation) {
+export function yearFor(citation: string): number | null {
   const match = citation.match(/\[(\d{4})\]/);
   return match ? Number(match[1]) : null;
 }
 
 // Builds a Find Case Law link only where the neutral citation maps to one exactly.
-export function buildCaseLink(citation) {
+export function buildCaseLink(citation: string): string {
   if (!citation) return '';
-  const text = normaliseSpace(citation);
-  const match = text.match(/^\[(\d{4})\]\s+(UKSC|UKPC|EWCA\s+Civ|EWCA\s+Crim|EWHC)\s+(\d+)(?:\s*\(([A-Za-z]+)\))?$/i);
+  const text = normaliseSpace(citation).replace(/[.,;]+$/, '');
+  const match = text.match(/^\[(\d{4})\]\s+(UKSC|UKHL|UKPC|EWCA\s+Civ|EWCA\s+Crim|EWHC)\s+(\d+)(?:\s*\(?([A-Za-z]+)\)?)?$/);
   if (!match) return '';
 
   const year = match[1];
@@ -73,6 +102,7 @@ export function buildCaseLink(citation) {
   const base = 'https://caselaw.nationalarchives.gov.uk';
 
   if (code === 'UKSC') return `${base}/uksc/${year}/${number}`;
+  if (code === 'UKHL') return `${base}/ukhl/${year}/${number}`;
   if (code === 'UKPC') return `${base}/ukpc/${year}/${number}`;
   if (code === 'EWCA CIV') return `${base}/ewca/civ/${year}/${number}`;
   if (code === 'EWCA CRIM') return `${base}/ewca/crim/${year}/${number}`;
@@ -84,34 +114,36 @@ export function buildCaseLink(citation) {
   return '';
 }
 
-function collectLeft(text, vStart) {
-  const before = text.slice(Math.max(0, vStart - 120), vStart);
+function collectLeft(text: string, vStart: number): string[] {
+  const before = text.slice(Math.max(0, vStart - 160), vStart);
   const words = before.split(/\s+/).filter(Boolean);
-  const picked = [];
-  for (let i = words.length - 1; i >= 0 && picked.length < 6; i -= 1) {
-    if (!WORD_RE.test(words[i])) break;
+  const picked: string[] = [];
+  for (let i = words.length - 1; i >= 0 && picked.length < 8; i -= 1) {
+    if (!isNameWord(words[i])) break;
     picked.unshift(words[i]);
   }
-  while (picked.length > 1 && STOP_OPENERS.includes(picked[0])) picked.shift();
-  if (picked.length === 0 || STOP_OPENERS.includes(picked[0])) return [];
+  while (picked.length > 1 && isStop(picked[0])) picked.shift();
+  if (picked.length === 0 || isStop(picked[0])) return [];
   return picked;
 }
 
-function collectRight(text, vEnd) {
-  const after = text.slice(vEnd, vEnd + 120);
+function collectRight(text: string, vEnd: number): string[] {
+  const after = text.slice(vEnd, vEnd + 160);
   const words = after.split(/\s+/).filter(Boolean);
-  const picked = [];
+  const picked: string[] = [];
   for (const word of words) {
-    if (picked.length >= 6) break;
-    const clean = word.replace(/[,.;:)\]"'”’]+$/, '');
-    if (!WORD_RE.test(clean)) break;
-    picked.push(clean);
+    if (picked.length >= 8) break;
+    const clean = word.replace(/[,;:)"'”’]+$/, '');
+    const kept = BRACKET_RE.test(clean) ? clean : clean.replace(/[.]+$/, '');
+    if (!isNameWord(kept)) break;
+    picked.push(kept);
   }
+  while (picked.length > 0 && isStop(picked[0])) picked.shift();
   return picked;
 }
 
-function findCaseNames(text) {
-  const results = [];
+function findCaseNames(text: string) {
+  const results: { name: string; start: number; end: number }[] = [];
   const separator = /(^|[^A-Za-z])v\.?([^A-Za-z]|$)/g;
   let match;
   while ((match = separator.exec(text)) !== null) {
@@ -130,33 +162,68 @@ function findCaseNames(text) {
     const rightAt = text.indexOf(rightStr, vEnd);
     if (start < 0 || rightAt < 0) continue;
 
-    results.push({
-      name: `${leftStr} v ${rightStr}`,
-      start,
-      end: rightAt + rightStr.length,
-    });
+    results.push({ name: `${leftStr} v ${rightStr}`, start, end: rightAt + rightStr.length });
   }
   return results;
 }
 
-function findParagraphRef(text, start, end) {
-  const windowStart = Math.max(0, start - 150);
-  const windowEnd = Math.min(text.length, end + 150);
-  const windowText = text.slice(windowStart, windowEnd);
-  const para = windowText.match(/(?:paragraph|para)\.?\s*(\d{1,3}[A-Za-z\-]*)/i);
-  if (para) return `para ${para[1]}`;
-  const bracket = windowText.match(/\[(\d{1,3})\]/);
-  if (bracket) return `[${bracket[1]}]`;
-  return '';
+function isSentenceBreak(text: string, index: number): boolean {
+  const ch = text[index];
+  if (ch === '\n') return true;
+  if (!'.!?;'.includes(ch)) return false;
+  const after = text.slice(index + 1, index + 40);
+  if (!/^\s+[A-Z(\[]/.test(after)) return false;
+  const before = text.slice(Math.max(0, index - 8), index + 1);
+  // "v.", "No.", "Ltd.", "Mr." do not end a sentence.
+  if (/\b(?:v|vs|no|mr|mrs|ms|dr|hon|co|ltd|plc|st|jr|cf)\.$/i.test(before)) return false;
+  return true;
 }
 
-function excerptFor(text, start, end) {
+function sentenceAround(text: string, index: number) {
+  let start = 0;
+  for (let i = index; i >= 0; i -= 1) {
+    if (isSentenceBreak(text, i)) {
+      start = i + 1;
+      break;
+    }
+  }
+  let end = text.length;
+  for (let i = index; i < text.length; i += 1) {
+    if (isSentenceBreak(text, i)) {
+      end = i + 1;
+      break;
+    }
+  }
+  return { start, end };
+}
+
+// A pinpoint belongs to the case it follows, and only inside the same sentence.
+function findParagraphRef(text: string, start: number, end: number): string {
+  const bounds = sentenceAround(text, start);
+  const after = text.slice(end, bounds.end);
+  const before = text.slice(bounds.start, start);
+  const pattern = /(?:at\s+|see\s+)?(?:para(?:graph)?s?\.?\s*(\d{1,3})(?:\s*\(([A-Za-z0-9]{1,4})\))?|\[(\d{1,3})\])/i;
+
+  const hit = after.match(pattern) || before.match(pattern);
+  if (!hit) return '';
+  if (hit[3]) return `[${hit[3]}]`;
+  return `para ${hit[1]}${hit[2] ? `(${hit[2].toLowerCase()})` : ''}`;
+}
+
+function excerptFor(text: string, start: number, end: number): string {
   const from = Math.max(0, start - 150);
   const to = Math.min(text.length, end + 150);
   return normaliseSpace(text.slice(from, to));
 }
 
-function buildCandidate(text, name, citation, start, end) {
+function buildCandidate(
+  text: string,
+  name: string,
+  citation: string,
+  start: number,
+  end: number,
+  linkStatus = ''
+) {
   return {
     name,
     neutral_citation: citation,
@@ -164,25 +231,28 @@ function buildCandidate(text, name, citation, start, end) {
     year: citation ? yearFor(citation) : null,
     paragraph_ref: findParagraphRef(text, start, end),
     excerpt: excerptFor(text, start, end),
+    link_status: linkStatus,
+    needs_name_confirmation: true,
   };
 }
 
-export function extractCandidates(text) {
+export function extractCandidates(text: string) {
   const citations = findCitations(text);
   const names = findCaseNames(text).sort((a, b) => a.start - b.start);
 
-  const usedCitations = new Set();
-  const seenKeys = new Set();
-  const candidates = [];
+  const usedCitations = new Set<string>();
+  const seenKeys = new Set<string>();
+  const candidates: any[] = [];
 
   for (const entry of names) {
+    // The citation must follow the name inside the same sentence.
+    const bounds = sentenceAround(text, entry.start);
     const linked = citations.find(
       (citation) =>
         citation.index >= entry.end &&
-        citation.index - entry.end <= 80 &&
+        citation.index <= bounds.end &&
         !usedCitations.has(citation.citation.toLowerCase())
     );
-    if (linked && usedCitations.has(linked.citation.toLowerCase())) continue;
 
     const citation = linked ? linked.citation : '';
     const key = citation ? `c:${citation.toLowerCase()}` : `n:${entry.name.toLowerCase()}`;
@@ -209,6 +279,28 @@ export function extractCandidates(text) {
     });
   }
 
+  // Law reports: the case is added, but there is no automatic link.
+  for (const report of findLawReportCitations(text)) {
+    const key = `l:${report.citation.toLowerCase()}`;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    const bounds = sentenceAround(text, report.index);
+    const named = names.find((entry) => entry.start >= bounds.start && entry.end <= bounds.end);
+    candidates.push({
+      ...buildCandidate(
+        text,
+        named ? named.name : `Unknown - ${report.citation}`,
+        report.citation,
+        report.index,
+        report.end,
+        LAW_REPORT_STATUS
+      ),
+      court: '',
+      year: yearFor(report.citation),
+      position: report.index,
+    });
+  }
+
   return candidates
     .sort((a, b) => a.position - b.position)
     .slice(0, MAX_CANDIDATES)
@@ -216,8 +308,8 @@ export function extractCandidates(text) {
 }
 
 // Every neutral citation appearing in a text, once each, in order of appearance.
-export function uniqueCitations(text) {
-  const seen = new Map();
+export function uniqueCitations(text: string) {
+  const seen = new Map<string, string>();
   for (const entry of findCitations(text)) {
     const key = entry.citation.toLowerCase();
     if (!seen.has(key)) seen.set(key, entry.citation);

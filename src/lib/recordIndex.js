@@ -5,6 +5,7 @@
 import { normalise } from '@/lib/authorityCheck';
 import { classifyDocument, roleForCategory } from '@/lib/documentType';
 import { dateFromDocument } from '@/lib/documentDate';
+import { transcriptSegments } from '@/lib/transcript';
 
 export const RECORD_STATUSES = ['Filed or served', 'Draft', 'Reference only'];
 export const FILED_BY_OPTIONS = ['Ours', 'Other party', 'Court'];
@@ -158,6 +159,11 @@ function segmentize(text) {
   if (pageNo !== null && pageLines.length) pages.push({ pageNo, pageLines });
 
   if (pages.length) {
+    // Printed line numbers are used where the transcript shows them; otherwise the
+    // lines are counted as they appear on the page.
+    const printed = transcriptSegments(String(text || ''));
+    if (printed.length) return { segments: printed.slice(0, MAX_SEGMENTS), mode: 'page' };
+
     const segments = [];
     pages.forEach((page) => {
       const filled = page.pageLines.filter((line) => line.length > 0);
@@ -289,12 +295,15 @@ export function indexDocument(document = {}) {
   doc.record_status = document.record_status || 'Filed or served';
   doc.filed_by = document.filed_by || '';
   doc.filed_date = document.document_date || document.filed_date || '';
-  // The document's own date wins; the file name and the stored date are fallbacks.
-  doc.doc_date =
-    dateFromDocument(doc.text, verdict.category) ||
-    dateFromDocument(doc.name, verdict.category) ||
-    doc.filed_date ||
-    '';
+  // A date the user confirmed is used. A detected date is kept for display only.
+  const detected =
+    dateFromDocument(doc.text, verdict.category) || dateFromDocument(doc.name, verdict.category) || '';
+  const given = document.confirmed_date || document.document_date || doc.filed_date || '';
+  doc.date_confirmed =
+    document.date_confirmed === true ? true : document.date_confirmed === false ? false : undefined;
+  doc.confirmed_date = given;
+  doc.detected_date = detected;
+  doc.doc_date = doc.date_confirmed === false ? '' : given || detected || '';
   doc.exhibit_of = document.exhibit_of || '';
 
   const built = segmentize(doc.text);
@@ -324,6 +333,9 @@ export function indexDocument(document = {}) {
     filed_by: doc.filed_by,
     filed_date: doc.filed_date,
     doc_date: doc.doc_date,
+    confirmed_date: doc.confirmed_date,
+    date_confirmed: doc.date_confirmed,
+    detected_date: doc.detected_date,
     exhibit_of: doc.exhibit_of,
     index_mode: built.mode,
     segments,

@@ -1,4 +1,6 @@
 // Document dates read from the document itself. Deterministic, no guessing.
+// An application notice and a witness statement are dated by their issue stamp,
+// statement of truth or signature line - never by the first date in the body.
 const MONTHS = {
   january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
   july: 7, august: 8, september: 9, october: 10, november: 11, december: 12
@@ -9,6 +11,13 @@ const LONG = new RegExp(
   'gi'
 );
 const NUMERIC = /\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/g;
+
+const LONG_SRC = `\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${Object.keys(MONTHS).join('|')})\\s+\\d{4}`;
+const NUMERIC_SRC = '\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}';
+const DATE_SRC = `(${LONG_SRC}|${NUMERIC_SRC})`;
+
+// Documents whose date comes from a stamp, statement of truth or signature line.
+export const STAMPED_CATEGORIES = ['Application notices', 'Witness statements'];
 
 function iso(year, month, day) {
   const pad = (value) => String(value).padStart(2, '0');
@@ -49,53 +58,134 @@ function firstDateIn(text) {
   return iso(Number(numeric[3]), Number(numeric[2]), Number(numeric[1]));
 }
 
-// Judgments and orders: the date handed down or made. Letters: the date on the letter.
-export function dateFromDocument(text = '', category = '') {
+function dateMatch(pattern, text) {
+  const match = String(text || '').match(pattern);
+  if (!match) return '';
+  return toIsoDate(match[1] || match[0]);
+}
+
+// "Issued on 19 August 2026", "Date of issue: 19/08/2026", "Sealed ...".
+function issueStampDate(text) {
   const body = String(text || '');
-  if (!body.trim()) return '';
+  return (
+    dateMatch(
+      new RegExp(
+        `\\b(?:issued(?:\\s+on)?|date of issue|issue date|sealed(?:\\s+on)?|stamped(?:\\s+on)?|filed(?:\\s+on)?)\\b[^\\n]{0,40}?${DATE_SRC}`,
+        'i'
+      ),
+      body
+    ) ||
+    dateMatch(
+      new RegExp(
+        `\\b(?:N244|application notice|continuation sheet)\\b[^\\n]{0,100}?\\b(?:issued|sealed|stamped)\\b[^\\n]{0,24}?${DATE_SRC}`,
+        'i'
+      ),
+      body
+    )
+  );
+}
+
+function statementOfTruthDate(text) {
+  const body = String(text || '');
+  const at = body.search(/\bstatement of truth\b/i);
+  if (at < 0) return '';
+  const tail = body.slice(at, at + 1600);
+  return (
+    dateMatch(new RegExp(`\\bdated\\s*:?\\s*${DATE_SRC}`, 'i'), tail) ||
+    dateMatch(new RegExp(DATE_SRC, 'i'), tail)
+  );
+}
+
+function signatureDate(text) {
+  const tail = String(text || '').slice(-2500);
+  return (
+    dateMatch(new RegExp(`(?:signed|signature)\\b[^\\n]{0,60}?${DATE_SRC}`, 'i'), tail) ||
+    dateMatch(new RegExp(`\\bdated\\s*:?\\s*${DATE_SRC}`, 'i'), tail) ||
+    dateMatch(new RegExp(`(?:date|dated)\\s*[^\\n]{0,30}?${DATE_SRC}`, 'i'), tail)
+  );
+}
+
+// Returns the date and where it was read from, so the user can confirm or change it.
+export function detectDocumentDate(text = '', category = '') {
+  const body = String(text || '');
+  if (!body.trim()) return { date: '', source: 'no text' };
   const head = body.slice(0, 4000);
+
+  if (STAMPED_CATEGORIES.includes(category)) {
+    const stamp = issueStampDate(head) || issueStampDate(body);
+    if (stamp) return { date: stamp, source: 'issue stamp' };
+    const truth = statementOfTruthDate(body);
+    if (truth) return { date: truth, source: 'statement of truth' };
+    const signed = signatureDate(body);
+    if (signed) return { date: signed, source: 'signature line' };
+    return { date: '', source: 'no date on the stamp, statement of truth or signature' };
+  }
 
   const anchors = [];
   if (category === 'Judgments') {
-    anchors.push(
+    anchors.push([
       /(?:handed down|delivered|given|approved|judgment date|date of judgment)[^\n.]{0,120}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i,
-      /(?:handed down|delivered|approved)[^\n]{0,40}?(\b\d{1,2}\/\d{1,2}\/\d{4}\b)/i
-    );
+      'judgment date'
+    ]);
+    anchors.push([
+      /(?:handed down|delivered|approved)[^\n]{0,40}?(\b\d{1,2}\/\d{1,2}\/\d{4}\b)/i,
+      'judgment date'
+    ]);
+    anchors.push([/(?:^|\n)\s*Date\s*:\s*([^\n]{6,30})/, 'judgment date']);
   }
   if (category === 'Orders') {
-    anchors.push(/(?:DATED|dated|Date of order)[^\n.]{0,60}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/);
-  }
-  if (category === 'Judgments') {
-    anchors.push(/(?:^|\n)\s*Date\s*:\s*([^\n]{6,30})/);
-  }
-  if (category === 'Application notices') {
-    anchors.push(
-      /(?:N244|application notice)[^\n]{0,80}?[Dd]ated\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-]\d{4}|[^\n]{6,30})/i,
-      /[Dd]ated\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-]\d{4}|\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i
-    );
-  }
-  if (category === 'Witness statements') {
-    // Only a date next to the heading or the signature: a date inside the evidence is a fact,
-    // not the date of the statement.
-    anchors.push(
-      /(?:^|\n)\s*[^\n]{0,60}?(?:statement|dated)\s+(?:of\s+)?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i,
-      /dated\s*:?\s*(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)\s*$/im
-    );
+    anchors.push([
+      /(?:DATED|dated|Date of order)[^\n.]{0,60}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/,
+      'order date'
+    ]);
   }
   if (category === 'Correspondence') {
-    anchors.push(/^\s*(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/m, /(?:^|\n)\s*date:\s*([^\n]{4,30})/i);
+    anchors.push([/^\s*(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/m, 'letter date']);
+    anchors.push([/(?:^|\n)\s*date:\s*([^\n]{4,30})/i, 'letter date']);
+  }
+  if (category === 'Transcripts') {
+    anchors.push([
+      /(?:hearing|proceedings|before)[^\n.]{0,80}?(\b\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}\b)/i,
+      'hearing date'
+    ]);
   }
 
-  for (const pattern of anchors) {
+  for (const [pattern, source] of anchors) {
     const match = head.match(pattern);
     if (match) {
       const value = toIsoDate(match[1]);
-      if (value) return value;
+      if (value) return { date: value, source };
     }
   }
-  // A witness statement's date is never guessed from a date in the evidence.
-  if (category === 'Witness statements') return '';
-  return firstDateIn(head);
+
+  const fallback = firstDateIn(head);
+  return fallback
+    ? { date: fallback, source: 'first date in the document' }
+    : { date: '', source: 'no date found' };
+}
+
+export function dateFromDocument(text = '', category = '') {
+  return detectDocumentDate(text, category).date;
+}
+
+// The line shown beside a detected date: it is never treated as confirmed on its own.
+export function detectedLabel(detection = {}) {
+  if (!detection.date) {
+    return `No date detected${detection.source ? ` (${detection.source})` : ''} - enter the date`;
+  }
+  const shown = formatDate(detection.date);
+  if (detection.source && detection.source !== 'first date in the document') {
+    return `Detected: ${shown} (${detection.source}) - Confirm / Change`;
+  }
+  return `Detected: ${shown} - Confirm / Change`;
+}
+
+// Only a confirmed date is used by promptness. Documents saved before dates were
+// confirmed still use the date that was entered against them.
+export function confirmedDate(document = {}) {
+  if (document.date_confirmed === true) return document.confirmed_date || '';
+  if (document.date_confirmed === false) return '';
+  return document.confirmed_date || document.document_date || document.filed_date || document.doc_date || '';
 }
 
 export function daysBetween(fromIso, toIso) {

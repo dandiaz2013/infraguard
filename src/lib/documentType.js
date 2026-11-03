@@ -90,6 +90,47 @@ const NAME_SIGNALS = [
   { re: /letter|correspondence|email|escalation/i, category: 'Correspondence', w: 3 }
 ];
 
+const SIDE_PATTERNS = [
+  { re: /\b(?:solicitors?|agents?)\s+for\s+the\s+(claimant|defendant|respondent|appellant|petitioner|applicant)s?\b/i, weight: 3 },
+  { re: /\b(?:on behalf of|acting for)\s+(?:the\s+)?(claimant|defendant|respondent|appellant|petitioner|applicant)s?\b/i, weight: 3 },
+  { re: /\bwitness statement of\b[^\n]{0,120}?\((claimant|defendant|respondent|appellant|petitioner|applicant)\)/i, weight: 3 },
+  { re: /\bI am the (claimant|defendant|respondent|appellant)\b/i, weight: 2 },
+  { re: /\bI,\s?[^\n]{0,80}?\((claimant|defendant|respondent|appellant|petitioner|applicant)\)/i, weight: 2 },
+  { re: /\((claimant|defendant|respondent|appellant|petitioner|applicant)\)/i, weight: 1 }
+];
+
+// The side the document names for itself, e.g. "solicitors for the Defendant".
+export function sideNamedIn(text = '') {
+  let best = '';
+  let bestWeight = 0;
+  SIDE_PATTERNS.forEach((entry) => {
+    const match = String(text || '').match(entry.re);
+    if (match && entry.weight > bestWeight) {
+      best = match[1];
+      bestWeight = entry.weight;
+    }
+  });
+  return best ? best.charAt(0).toUpperCase() + best.slice(1).toLowerCase() : '';
+}
+
+// Party is never assumed to be ours: it is read from the document and confirmed by the user.
+export function detectParty({ text = '', category = '', our_side = '' } = {}) {
+  if (COURT_CATEGORIES.includes(category)) {
+    return { party: 'Court', reason: "The court's own document" };
+  }
+  const side = sideNamedIn(text);
+  const ours = String(our_side || '');
+  if (side && ours) {
+    return side.toLowerCase() === ours.toLowerCase()
+      ? { party: 'Ours', reason: `The document names the ${side}, which is our side` }
+      : { party: 'Other side', reason: `The document names the ${side}, not our side (${ours})` };
+  }
+  if (side) {
+    return { party: '', reason: `The document names the ${side} - confirm which side that is` };
+  }
+  return { party: '', reason: 'The document does not say which side it comes from' };
+}
+
 function scoreFor(category, name, body) {
   const group = SIGNALS.find((entry) => entry.category === category);
   let total = 0;
@@ -118,24 +159,24 @@ export function classifyDocument(document = {}) {
   const category = top && top.score >= 2 ? top.category : 'Other';
 
   const courtDocument = COURT_CATEGORIES.includes(category);
-  let party = courtDocument ? 'Court' : document.party || '';
-
-  if (!courtDocument) {
-    if (!['Ours', 'Other side'].includes(party)) {
-      // A letter, witness statement, application or skeleton comes from a party.
-      // The one uploaded into this matter is ours unless it says otherwise.
-      const otherSide =
-        /\b(on behalf of the (respondent|defendant|claimant)|we act for the (respondent|defendant)|solicitors for the (respondent|defendant))\b/i.test(
-          body
-        ) && /\brespondent|defendant\b/i.test(body) && document.client_side === 'other';
-      party = otherSide ? 'Other side' : 'Ours';
-    }
-    if (party === 'Court') party = 'Ours';
-  }
+  const detected = detectParty({
+    text: body,
+    category,
+    our_side: document.our_side || document.client_side_ours || ''
+  });
+  const chosen = ['Ours', 'Other side', 'Court'].includes(document.party) ? document.party : '';
+  const party = courtDocument ? 'Court' : chosen || detected.party;
 
   const dated = DATE.test(body);
 
-  return { category, party, court_document: courtDocument, dated };
+  return {
+    category,
+    party,
+    party_suggested: detected.party,
+    party_reason: chosen ? 'Party set by the user' : detected.reason,
+    court_document: courtDocument,
+    dated,
+  };
 }
 
 export function roleForCategory(category, party) {
