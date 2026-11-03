@@ -6,6 +6,7 @@ import { SAFETY_FOOTER, INDICATIVE } from '@/lib/safety';
 
 const LIGHT = {
   Strong: { dot: 'bg-green-500', text: 'text-green-800', Icon: CheckCircle2 },
+  Reasonable: { dot: 'bg-lime-500', text: 'text-lime-800', Icon: CheckCircle2 },
   Arguable: { dot: 'bg-amber-500', text: 'text-amber-800', Icon: CircleAlert },
   Weak: { dot: 'bg-red-500', text: 'text-red-800', Icon: AlertTriangle }
 };

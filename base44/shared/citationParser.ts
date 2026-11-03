@@ -43,12 +43,32 @@ function normaliseSpace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+// Lowercase connectors belong inside a party name: "Royal Bank of Scotland
+// International Ltd", "Secretary of State for Exiting the EU".
+const CONNECTOR = new Set([
+  'of', 'the', 'and', 'for', 'ex', 'de', 'la', 'van', 'von', 'du', 'del', 'in', 'on',
+  'at', 'by', 'to', 'upon', 'parte', 'state',
+]);
+
+function isConnector(word: string): boolean {
+  return CONNECTOR.has(String(word || '').toLowerCase());
+}
+
+function trimConnectors(words: string[]): string[] {
+  while (words.length && isConnector(words[words.length - 1])) words.pop();
+  while (words.length > 1 && isConnector(words[0])) words.shift();
+  return words;
+}
+
 function isStop(word: string): boolean {
   return STOP_OPENERS.some((entry) => entry.toLowerCase() === String(word).toLowerCase());
 }
 
+// A bare number can be part of a party name ("JP SPC 4").
+const NUM_RE = /^\d{1,3}$/;
+
 function isNameWord(word: string): boolean {
-  return WORD_RE.test(word) || CORP_RE.test(word) || BRACKET_RE.test(word);
+  return WORD_RE.test(word) || CORP_RE.test(word) || BRACKET_RE.test(word) || isConnector(word) || NUM_RE.test(word);
 }
 
 export function findCitations(text: string) {
@@ -122,6 +142,7 @@ function collectLeft(text: string, vStart: number): string[] {
     if (!isNameWord(words[i])) break;
     picked.unshift(words[i]);
   }
+  trimConnectors(picked);
   while (picked.length > 1 && isStop(picked[0])) picked.shift();
   if (picked.length === 0 || isStop(picked[0])) return [];
   return picked;
@@ -138,6 +159,7 @@ function collectRight(text: string, vEnd: number): string[] {
     if (!isNameWord(kept)) break;
     picked.push(kept);
   }
+  trimConnectors(picked);
   while (picked.length > 0 && isStop(picked[0])) picked.shift();
   return picked;
 }

@@ -3,6 +3,7 @@
 //   {{DOC:<document_id>|para:<number or range>}}
 //   {{DOC:<document_id>|page:<n>|lines:<a-b>}}
 import { normalise, findQuotations } from '@/lib/authorityCheck';
+import { parseTranscript, resolveLineRef, hasPrintedNumbers } from '@/lib/transcript';
 
 const REF_RE = /\{\{DOC:([^|}]+)\|([^}]+)\}\}/g;
 const MARKER_LINE = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.)])\s*/;
@@ -35,7 +36,7 @@ export function parseSpec(spec) {
     const from = Number(para[1]);
     return { kind: 'para', from, to: para[2] ? Number(para[2]) : from };
   }
-  const page = value.match(/pages?:?\s*(\d{1,3})/i);
+  const page = value.match(/(?:pages?|p\.?)\s*:?\s*(\d{1,3})/i);
   const lines = value.match(/lines?:?\s*(\d{1,3})\s*[-–]\s*(\d{1,3})/i);
   if (page) {
     return { kind: 'page', page: Number(page[1]), lines: lines ? [Number(lines[1]), Number(lines[2])] : null };
@@ -164,6 +165,7 @@ export function resolveDocumentRefs(text, documents = []) {
     };
 
     const doc = byId.get(String(ref.document_id));
+    if (doc && !doc.name) doc.name = doc.file_name || 'document';
     if (!doc) {
       return {
         ...base,
@@ -220,6 +222,33 @@ export function resolveDocumentRefs(text, documents = []) {
     }
 
     if (spec.kind === 'page') {
+      // A transcript is cited by the numbers printed in its margin, so the printed
+      // page and lines are read back exactly as the page shows them.
+      const parsedTranscript = parseTranscript(doc.text);
+      if (hasPrintedNumbers(parsedTranscript)) {
+        const resolved = resolveLineRef(parsedTranscript, formatSpec(spec));
+        if (!resolved.found) {
+          return {
+            ...base,
+            document_name: doc.name,
+            label,
+            status: 'missing_paragraph',
+            statusLabel: 'Printed lines not found',
+            text: resolved.text || '',
+            detail: resolved.reason,
+          };
+        }
+        return {
+          ...base,
+          document_name: doc.name,
+          label,
+          status: 'found',
+          statusLabel: 'Found at the printed page and lines',
+          text: resolved.text,
+          detail: `Printed lines ${resolved.from}-${resolved.to} on page ${resolved.page}.`,
+        };
+      }
+
       const found = findPage(doc.text, spec.page, spec.lines);
       if (found.status === 'missing') {
         return {

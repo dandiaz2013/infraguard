@@ -62,16 +62,38 @@ export default async function (req) {
         }
 
         const displayName = name || `Unknown - ${citation}`;
+        // A case can be extracted twice, once by neutral citation and once by law
+        // report. Both belong to one record, which then carries both citations.
+        const isReport = row.link_status === 'Law report citation, no automatic link';
+        const neutralCitation = isReport ? '' : citation;
+        const reportCitation = isReport ? citation : '';
         try {
-          let record = citation ? byCitation.get(citation.toLowerCase()) : null;
+          if (isReport && !name) {
+            skipped += 1;
+            continue;
+          }
+
+          let record = neutralCitation ? byCitation.get(neutralCitation.toLowerCase()) : null;
+          if (!record && reportCitation) record = byCitation.get(reportCitation.toLowerCase()) || null;
           if (!record) record = byName.get(displayName.toLowerCase()) || null;
 
           if (record) {
             matched += 1;
+            if (reportCitation && record.report_reference !== reportCitation) {
+              await base44.entities.CaseLaw.update(record.id, { report_reference: reportCitation });
+              record.report_reference = reportCitation;
+              byCitation.set(reportCitation.toLowerCase(), record);
+            }
+            if (neutralCitation && !record.neutral_citation) {
+              await base44.entities.CaseLaw.update(record.id, { neutral_citation: neutralCitation });
+              record.neutral_citation = neutralCitation;
+              byCitation.set(neutralCitation.toLowerCase(), record);
+            }
           } else {
             record = await base44.entities.CaseLaw.create({
               name: displayName,
-              neutral_citation: citation,
+              neutral_citation: neutralCitation,
+              report_reference: reportCitation,
               court: row.court || courtFor(citation),
               year: row.year || yearFor(citation) || undefined,
               url: judgment.source_url || '',
@@ -79,7 +101,8 @@ export default async function (req) {
               verified: false,
             });
             created += 1;
-            if (citation) byCitation.set(citation.toLowerCase(), record);
+            if (neutralCitation) byCitation.set(neutralCitation.toLowerCase(), record);
+            if (reportCitation) byCitation.set(reportCitation.toLowerCase(), record);
             byName.set(displayName.toLowerCase(), record);
           }
 

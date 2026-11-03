@@ -8,6 +8,7 @@ import { SAFETY_FOOTER } from '@/lib/safety';
 const RATING_STYLE = {
   Weak: 'bg-red-100 text-red-900 border-red-300',
   Arguable: 'bg-amber-100 text-amber-900 border-amber-300',
+  Reasonable: 'bg-lime-100 text-lime-900 border-lime-300',
   Strong: 'bg-green-100 text-green-900 border-green-300'
 };
 

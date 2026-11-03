@@ -2,7 +2,7 @@
 // function is called once with a bounded payload. Nothing touches a live matter.
 import { base44 } from '@/api/base44Client';
 import { classifyDocument, detectParty } from '@/lib/documentType';
-import { detectDocumentDate } from '@/lib/documentDate';
+import { detectDocumentDate, detectedLabel } from '@/lib/documentDate';
 import { classifyNote } from '@/lib/noteClassify';
 import { resolveLineRef } from '@/lib/transcript';
 import { splitParagraphs } from '@/lib/paragraphExtract';
@@ -11,7 +11,11 @@ import { buildCaseLink } from '@/lib/citationUrl';
 import { buildRecord, segmentMode } from '@/lib/recordIndex';
 import { verifyDraftCitations, toRecordDoc } from '@/lib/caseFile';
 import { promptnessFor } from '@/lib/promptness';
-import { rateIssue, APPROACHES, ceilingLine } from '@/lib/issueRating';
+import { rateIssue, APPROACHES, ceilingLine, rankOf } from '@/lib/issueRating';
+import { rateApproach } from '@/lib/issueApproach';
+import { buildFieldGroups, markUserStatement, userStatementLines, USER_MARKER } from '@/lib/fieldStates';
+import { resolveRecordBlock } from '@/lib/draftSections';
+import { resolveDocumentRefs } from '@/lib/docReferences';
 import { findTestMatter } from '@/lib/testMatter';
 import {
   N244_TEXT,
@@ -283,11 +287,174 @@ export const MODULE_TESTS = [
         ? pass(line)
         : fail(line || 'No ceiling line returned.');
     }
+  },
+  {
+    id: 'date-n244-no-stamp',
+    module: 'documentDate',
+    label: 'An N244 with no issue stamp takes no date from its body',
+    run: () => {
+      const text = [
+        'N244 Application notice',
+        'Claim No. CH-2024-000123',
+        'The defendant asks the court to set aside the order dated 25 March 2025.',
+        'Signed: A. Solicitor'
+      ].join('\n');
+      const found = detectDocumentDate(text, 'Application notices');
+      const label = detectedLabel(found);
+      return !found.date && label === 'Date not found - enter it'
+        ? pass('No date taken from the body; the user is asked to enter it.')
+        : fail(`Read "${found.date || label}" instead of asking for the date.`);
+    }
+  },
+  {
+    id: 'transcript-lines-in-pack',
+    module: 'docReferences',
+    label: 'A transcript citation resolves to the printed page and lines in the source pack',
+    run: () => {
+      const docs = [{ id: 'transcript', name: 'Transcript of hearing.txt', text: TRANSCRIPT_TEXT }];
+      const rows = resolveDocumentRefs('See {{DOC:transcript|p.16 lines 9-12}}.', docs);
+      const row = rows[0];
+      if (!row) return fail('The reference was not read at all.');
+      const ok =
+        row.status === 'found' &&
+        /p\.\s?16/i.test(row.label) &&
+        /first saw the transcript on 3 August 2026/i.test(row.text || '');
+      return ok
+        ? pass(`${row.label}: “${String(row.text).slice(0, 70)}…”`)
+        : fail(`${row.statusLabel}: ${row.detail || row.text || 'no text'}`);
+    }
+  },
+  {
+    id: 'field-states',
+    module: 'fieldStates',
+    label: 'Each field is from the documents, written by you, or not yet provided',
+    run: () => {
+      const record = buildRecord(recordDocs());
+      const expansions = [
+        'The defendant operated a voluntary scheme of indemnities.',
+        'No one explained the indemnity to the claimant before the order was made.',
+        'The claimant wrote twice before the hearing.'
+      ].join('\n');
+      const groups = buildFieldGroups({
+        record,
+        gateway: [],
+        ourPoints: [],
+        clauses: [],
+        misstatements: [],
+        chronology: null,
+        expansions: { undisputed_facts: expansions },
+        userFields: { 'fact:1': { text: 'No one explained the indemnity to the claimant before the order was made.', group: 'facts' } }
+      });
+      const facts = groups.find((group) => group.id === 'facts').fields.slice(0, 3);
+      const states = facts.map((field) => field.state).join(',');
+      const marked = userStatementLines(groups)[0] || {};
+      const ok =
+        states === 'documents,yours,missing' &&
+        Boolean(facts[0].document_name) &&
+        String(marked.text || '').includes(USER_MARKER);
+      return ok
+        ? pass('From the documents, written by you, not yet provided — the written one carries the marker.')
+        : fail(`States read ${states}; marker ${String(marked.text || '').includes(USER_MARKER) ? 'present' : 'missing'}.`);
+    }
+  },
+  {
+    id: 'draft-beyond-5000',
+    module: 'draftSections',
+    label: 'A paragraph beyond character 5,000 is sent to the draft in full',
+    run: () => {
+      const padding = new Array(90)
+        .fill('This paragraph is background and carries nothing the draft relies on.')
+        .join('\n\n');
+      const text = `${padding}\n\n46. The judge said the scheme was voluntary.\n`;
+      const block = resolveRecordBlock({ document_name: 'Long judgment.txt', ref: 'para 46' }, [
+        { id: 'long', name: 'Long judgment.txt', text }
+      ]);
+      if (!block) return fail('Paragraph 46 was not found in the long document.');
+      const beyond = text.indexOf('46. The judge') > 5000;
+      return beyond && /voluntary/i.test(block.text)
+        ? pass(`Paragraph 46 sits at character ${text.indexOf('46. The judge')} and is returned in full.`)
+        : fail(`Paragraph 46 returned "${block.text.slice(0, 60)}" (beyond 5,000: ${beyond}).`);
+    }
+  },
+  {
+    id: 'rating-explanation-argument-only',
+    module: 'issueApproach',
+    label: 'A user explanation changes ARGUMENT but never EVIDENCE',
+    run: () => {
+      const record = buildRecord(recordDocs());
+      const issue = { id: 'promptness', label: 'Delay in applying to set aside', ask: 'What explains the interval?' };
+      const before = rateApproach({ issue, record, extracts: [] });
+      const after = rateApproach({
+        issue,
+        approachIds: ['interval-explained'],
+        explanation: 'The interval is explained by the illness set out in the witness statement, so the delay is accounted for.',
+        source: { document_name: 'Witness statement - Jane Brown (Claimant).txt', ref: 'para 4' },
+        record,
+        extracts: [],
+        previous: { evidence: before.evidence.rating, argument: before.argument.rating }
+      });
+      const dimensions = (after.changes || []).map((change) => change.dimension).join(',');
+      const ok =
+        after.evidence.rating === before.evidence.rating &&
+        rankOf(after.argument.rating) > rankOf(before.argument.rating) &&
+        dimensions === 'Argument';
+      return ok
+        ? pass(`Evidence stayed ${after.evidence.rating}; Argument ${before.argument.rating} → ${after.argument.rating}.`)
+        : fail(`Evidence ${before.evidence.rating} → ${after.evidence.rating}; Argument ${before.argument.rating} → ${after.argument.rating}; changes: ${dimensions || 'none'}.`);
+    }
+  },
+  {
+    id: 'user-answer-marker',
+    module: 'fieldStates',
+    label: 'A user-written answer carries the marker into the draft',
+    run: () => {
+      const marked = markUserStatement('The order was never served on the claimant.');
+      const ok = marked.endsWith(USER_MARKER) && marked.startsWith('The order was never served');
+      return ok ? pass(marked) : fail(marked || 'No marked text.');
+    }
+  },
+  {
+    id: 'merge-duplicate-case',
+    module: 'parseJudgment',
+    label: 'A case extracted twice becomes one record with both citations',
+    run: async () => {
+      const found = await base44.entities.Judgment.filter({ title: `${TEST_MARKER} - citations` });
+      const judgment = (Array.isArray(found) ? found : found?.items || [])[0];
+      if (!judgment) return fail('The self-test citation judgment is missing. Create the test data first.');
+
+      const name = 'Merge Test Ltd v Ashfield Holdings Ltd';
+      const response = await base44.functions.invoke('parseJudgment', {
+        judgment_id: judgment.id,
+        candidates: [
+          { name, neutral_citation: '[2021] UKSC 99', paragraph_ref: '[4]' },
+          { name, neutral_citation: '[2021] 2 WLR 55', paragraph_ref: '[4]', link_status: 'Law report citation, no automatic link' }
+        ]
+      });
+      if (response.data?.error) return fail(`Returned an error: ${response.data.error}`);
+
+      const rows = await base44.entities.CaseLaw.filter({ name });
+      const list = Array.isArray(rows) ? rows : rows?.items || [];
+      const merged =
+        list.length === 1 &&
+        list[0].neutral_citation === '[2021] UKSC 99' &&
+        list[0].report_reference === '[2021] 2 WLR 55';
+
+      await Promise.all(
+        list.filter((record) => /Parsed from judgment/.test(record.source_note || '')).map((record) => base44.entities.CaseLaw.delete(record.id))
+      );
+
+      return merged
+        ? pass('One record carrying [2021] UKSC 99 and [2021] 2 WLR 55.')
+        : fail(
+            `${list.length} record(s): neutral "${list[0]?.neutral_citation || 'none'}", report "${list[0]?.report_reference || 'none'}".`
+          );
+    }
   }
 ];
 
 const FUNCTION_NAMES = [
   'argumentCoach',
+  'argumentSections',
   'argumentProspects',
   'argumentQuestions',
   'caseWorkflowArguments',
@@ -391,6 +558,18 @@ async function parseJudgmentRun() {
   const lawReport = candidates.find((entry) => entry.neutral_citation === '[1992] 4 All ER 363');
 
   const problems = [];
+  const rbs = candidates.find((entry) => entry.neutral_citation === '[2022] UKSC 50');
+  const miller = candidates.find((entry) => entry.neutral_citation === '[2017] UKSC 5');
+  const reportDuplicate = candidates.find((entry) => entry.neutral_citation === '[2023] 3 WLR 456');
+  if (rbs?.name !== 'Royal Bank of Scotland International Ltd v JP SPC 4') {
+    problems.push(`lowercase "of" lost: "${rbs?.name}"`);
+  }
+  if (miller?.name !== 'R (Miller) v Secretary of State for Exiting the European Union') {
+    problems.push(`"Secretary of State" read as "${miller?.name}"`);
+  }
+  if (reportDuplicate?.name !== 'Philipp v Barclays Bank UK plc') {
+    problems.push(`law report citation named "${reportDuplicate?.name}" instead of the case`);
+  }
   if (philipp?.name !== 'Philipp v Barclays Bank UK plc') problems.push(`name read as "${philipp?.name}"`);
   if (philipp?.paragraph_ref !== '[115]') problems.push(`Philipp pinpoint read as "${philipp?.paragraph_ref || 'none'}"`);
   if (tibbles?.paragraph_ref !== '[39]') problems.push(`Tibbles pinpoint read as "${tibbles?.paragraph_ref || 'none'}"`);

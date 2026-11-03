@@ -18,6 +18,10 @@ import ExtractNeededPanel from '@/components/argument/ExtractNeededPanel';
 import GapAnalysisPanel from '@/components/argument/GapAnalysisPanel';
 import CaseMaterialPanel from '@/components/argument/CaseMaterialPanel';
 import CaseBrief from '@/components/argument/CaseBrief';
+import FieldStatesPanel from '@/components/argument/FieldStatesPanel';
+import FactExpansionsCard from '@/components/argument/FactExpansionsCard';
+import SectionDraftPanel from '@/components/draft/SectionDraftPanel';
+import { buildFieldGroups, userStatementLines } from '@/lib/fieldStates';
 import GatewayPanel from '@/components/argument/GatewayPanel';
 import TestFromMainAuthority from '@/components/argument/TestFromMainAuthority';
 import ProspectsPanel from '@/components/argument/ProspectsPanel';
@@ -42,6 +46,7 @@ import { SAFETY_FOOTER } from '@/lib/safety';
 const TABS = [
   ['record', 'Record'],
   ['gateway', 'Gateway'],
+  ['sections', 'Sections'],
   ['draft', 'Draft'],
   ['checks', 'Checks'],
   ['questions', 'Questions']
@@ -213,7 +218,116 @@ export default function ArgumentBuilder() {
     () => buildGateway({ record, extracts: extracted, promptness }),
     [record, extracted, promptness]
   );
-  const prospects = useMemo(() => gatewayProspects(gateway), [gateway]);
+  const { data: approachRows = [] } = useQuery({
+    queryKey: ['issueApproaches', selectedMatter],
+    queryFn: async () => {
+      const page = await base44.entities.IssueApproach.filter({ matter_id: selectedMatter }, '-created_date', 200);
+      return Array.isArray(page) ? page : page?.items || [];
+    },
+    enabled: Boolean(selectedMatter)
+  });
+
+  const { data: userFieldRows = [] } = useQuery({
+    queryKey: ['userFields', selectedMatter],
+    queryFn: async () => {
+      const page = await base44.entities.UserField.filter({ matter_id: selectedMatter });
+      return Array.isArray(page) ? page : page?.items || [];
+    },
+    enabled: Boolean(selectedMatter)
+  });
+
+  const userFieldMap = useMemo(
+    () => Object.fromEntries((userFieldRows || []).map((row) => [row.field_key, row])),
+    [userFieldRows]
+  );
+
+  const savedByIssue = useMemo(() => {
+    const map = {};
+    (approachRows || []).forEach((row) => {
+      if (row.issue_id && !map[row.issue_id]) map[row.issue_id] = row;
+    });
+    return map;
+  }, [approachRows]);
+
+  const historyByIssue = useMemo(() => {
+    const map = {};
+    (approachRows || []).forEach((row) => {
+      if (!row.issue_id) return;
+      map[row.issue_id] = [...(map[row.issue_id] || []), row];
+    });
+    return map;
+  }, [approachRows]);
+
+  // The two-axis ratings drive the gateway, the prospects and the case brief.
+  const ratedGateway = useMemo(
+    () =>
+      gateway.map((issue) => {
+        const saved = savedByIssue[issue.id];
+        if (!saved?.evidence_rating) return issue;
+        return {
+          ...issue,
+          rating: saved.evidence_rating,
+          evidence_rating: saved.evidence_rating,
+          argument_rating: saved.argument_rating,
+          status: saved.status
+        };
+      }),
+    [gateway, savedByIssue]
+  );
+
+  const fieldGroups = useMemo(
+    () =>
+      buildFieldGroups({
+        record,
+        gateway,
+        ourPoints,
+        clauses,
+        misstatements,
+        chronology: chronologyData,
+        expansions: { disputed_facts: disputedFacts, undisputed_facts: undisputedFacts, chronology },
+        userFields: userFieldMap
+      }),
+    [record, gateway, ourPoints, clauses, misstatements, chronologyData, disputedFacts, undisputedFacts, chronology, userFieldMap]
+  );
+
+  const userStatements = useMemo(() => userStatementLines(fieldGroups), [fieldGroups]);
+
+  const saveField = async (field, payload) => {
+    const existing = userFieldMap[field.key];
+    const data = {
+      matter_id: selectedMatter,
+      argument_id: currentArgumentVersion?.id || '',
+      field_key: field.key,
+      group: payload.kind === 'position' ? 'position' : field.group,
+      text: payload.text,
+      source_document: payload.source_document || '',
+      added_at: new Date().toISOString()
+    };
+    if (existing) await base44.entities.UserField.update(existing.id, data);
+    else await base44.entities.UserField.create(data);
+    queryClient.invalidateQueries({ queryKey: ['userFields', selectedMatter] });
+  };
+
+  const removeField = async (field) => {
+    const existing = userFieldMap[field.key];
+    if (!existing) return;
+    await base44.entities.UserField.delete(existing.id);
+    queryClient.invalidateQueries({ queryKey: ['userFields', selectedMatter] });
+  };
+
+  const saveApproach = async (issue, payload) => {
+    await base44.entities.IssueApproach.create({
+      matter_id: selectedMatter,
+      argument_id: currentArgumentVersion?.id || '',
+      issue_id: issue.id,
+      issue_label: issue.title,
+      saved_at: new Date().toISOString(),
+      ...payload
+    });
+    queryClient.invalidateQueries({ queryKey: ['issueApproaches', selectedMatter] });
+  };
+
+  const prospects = useMemo(() => gatewayProspects(ratedGateway), [ratedGateway]);
   const dismissedDocs = procedural.dismissed_documents || [];
 
   const confirmedTests = legalTests.filter(
@@ -422,12 +536,21 @@ export default function ArgumentBuilder() {
                 status: extract.status || ''
               }))
           })),
-        gateway: gateway.map((issue) => ({
+        gateway: ratedGateway.map((issue) => ({
           number: issue.number,
           title: issue.title,
           ask: issue.ask,
           rating: issue.rating,
           rating_reason: issue.reason,
+          evidence_rating: issue.evidence_rating || '',
+          argument_rating: issue.argument_rating || '',
+          status: issue.status || '',
+          approach: savedByIssue[issue.id]
+            ? [...(savedByIssue[issue.id].approach_ids || []), savedByIssue[issue.id].own_approach]
+                .filter(Boolean)
+                .join('; ')
+            : '',
+          explanation: savedByIssue[issue.id]?.explanation || '',
           our_answer: issue.ours
             ? { quote: issue.ours.quote, document_name: issue.ours.document_name, ref: issue.ours.ref }
             : null,
@@ -437,6 +560,7 @@ export default function ArgumentBuilder() {
           gap: issue.gap,
           next_step: issue.next
         })),
+        user_statements: userStatements,
         promptness_note: promptness.note,
         question_answers: questions
           .filter((question) => (question.answer || '').trim() || question.status)
@@ -541,8 +665,8 @@ export default function ArgumentBuilder() {
   });
 
   const brief = useMemo(
-    () => buildCaseBrief({ matter: currentMatter, gateway, promptness, missingDocs, dismissed: dismissedDocs, ourPoints }),
-    [currentMatter, gateway, promptness, missingDocs, dismissedDocs, ourPoints]
+    () => buildCaseBrief({ matter: currentMatter, gateway: ratedGateway, promptness, missingDocs, dismissed: dismissedDocs, ourPoints }),
+    [currentMatter, ratedGateway, promptness, missingDocs, dismissedDocs, ourPoints]
   );
 
   const prospectsHistory = argumentVersions
@@ -896,7 +1020,7 @@ export default function ArgumentBuilder() {
 
         {selectedMatter && (
           <>
-            <CaseBrief brief={brief} gateway={gateway} onOpenTab={setTab} />
+            <CaseBrief brief={brief} gateway={ratedGateway} onOpenTab={setTab} />
 
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="flex flex-wrap h-auto gap-1">
@@ -939,6 +1063,13 @@ export default function ArgumentBuilder() {
                     </p>
                   </CardContent>
                 </Card>
+
+                <FieldStatesPanel
+                  groups={fieldGroups}
+                  onSave={saveField}
+                  onRemove={removeField}
+                  onOpenRecord={openRecordAt}
+                />
 
                 <CaseMaterialPanel
                   ourPoints={ourPoints}
@@ -984,17 +1115,22 @@ export default function ArgumentBuilder() {
                 />
 
                 <GatewayPanel
-                  issues={gateway}
+                  issues={ratedGateway}
                   promptness={promptness}
                   orderId={procedural.order_document_id || ''}
                   onOrderChange={setOrder}
                   onOpenRecord={openRecordAt}
+                  record={record}
+                  extracts={extracted}
+                  savedByIssue={savedByIssue}
+                  historyByIssue={historyByIssue}
+                  onSaveApproach={saveApproach}
                 />
 
                 <ProspectsPanel
                   rating={prospects.rating}
                   explanation={prospects.explanation}
-                  issues={gateway}
+                  issues={ratedGateway}
                   savedRating={currentArgumentVersion?.prospects?.rating || ''}
                   history={prospectsHistory}
                   assessment={assessment}
@@ -1004,50 +1140,42 @@ export default function ArgumentBuilder() {
                 />
               </TabsContent>
 
+              <TabsContent value="sections" className="space-y-4">
+                <SectionDraftPanel
+                  matterId={selectedMatter}
+                  argumentId={currentArgumentVersion?.id || ''}
+                  court={currentMatter?.court || ''}
+                  position={position}
+                  matterName={currentMatter?.matter_name || ''}
+                  gateway={ratedGateway}
+                  documents={matterFiles}
+                  record={record}
+                  extracts={authorityExtracts}
+                  authorityPool={mainAuthorityPool}
+                  approachByIssue={savedByIssue}
+                  userStatements={userStatements}
+                  onOpenRecord={openRecordAt}
+                />
+              </TabsContent>
+
               <TabsContent value="draft" className="space-y-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Facts and expansions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div>
-                      <Label htmlFor="facts" className="text-xs">Core fact pattern *</Label>
-                      <Textarea
-                        id="facts"
-                        value={factPattern}
-                        onChange={(event) => setFactPattern(event.target.value)}
-                        rows={4}
-                        className="text-sm bg-slate-50"
-                        placeholder="Auto-populated from the matter. Edit as needed."
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {[
-                        ['chronology', 'Chronology', chronology, setChronology],
-                        ['disputed', 'Disputed facts', disputedFacts, setDisputedFacts],
-                        ['undisputed', 'Undisputed facts', undisputedFacts, setUndisputedFacts],
-                        ['legal_issues', 'Legal issues raised', legalIssuesRaised, setLegalIssuesRaised],
-                        ['procedural', 'Procedural history', proceduralHistory, setProceduralHistory],
-                        ['loss', 'Loss, harm or risk', lossHarmRisk, setLossHarmRisk]
-                      ].map(([id, label, value, setter]) => (
-                        <div key={id}>
-                          <Label htmlFor={id} className="text-xs">{label}</Label>
-                          <Textarea id={id} value={value} onChange={(event) => setter(event.target.value)} rows={2} className="text-sm" />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button size="sm" onClick={handleGenerate} disabled={isGenerating}>
-                        {isGenerating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                        Build the argument around the seven issues
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={handleCorrectFacts} disabled={isCorrectingFacts || !generatedArgument}>
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Correct facts
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <FactExpansionsCard
+                  factPattern={factPattern}
+                  onFactPatternChange={setFactPattern}
+                  fields={[
+                    ['chronology', 'Chronology', chronology, setChronology],
+                    ['disputed', 'Disputed facts', disputedFacts, setDisputedFacts],
+                    ['undisputed', 'Undisputed facts', undisputedFacts, setUndisputedFacts],
+                    ['legal_issues', 'Legal issues raised', legalIssuesRaised, setLegalIssuesRaised],
+                    ['procedural', 'Procedural history', proceduralHistory, setProceduralHistory],
+                    ['loss', 'Loss, harm or risk', lossHarmRisk, setLossHarmRisk]
+                  ]}
+                  onGenerate={handleGenerate}
+                  isGenerating={isGenerating}
+                  onCorrectFacts={handleCorrectFacts}
+                  isCorrectingFacts={isCorrectingFacts}
+                  canCorrect={Boolean(generatedArgument)}
+                />
 
                 <Card>
                   <CardHeader className="pb-2">

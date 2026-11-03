@@ -2,11 +2,15 @@ import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, CheckCircle2, CircleAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleAlert, Gauge } from 'lucide-react';
 import { INDICATIVE } from '@/lib/safety';
+import IssueApproachPanel from '@/components/argument/IssueApproachPanel';
+import { ceilingLine } from '@/lib/issueRating';
+import { approachesFor } from '@/lib/issueApproach';
 
 const RATING = {
   Strong: { Icon: CheckCircle2, className: 'bg-green-50 text-green-900 border-green-300' },
+  Reasonable: { Icon: CheckCircle2, className: 'bg-lime-50 text-lime-900 border-lime-300' },
   Arguable: { Icon: CircleAlert, className: 'bg-amber-50 text-amber-900 border-amber-300' },
   Weak: { Icon: AlertTriangle, className: 'bg-red-50 text-red-900 border-red-300' }
 };
@@ -33,14 +37,39 @@ function Answer({ label, answer, onOpenRecord }) {
   );
 }
 
-export default function GatewayPanel({ issues = [], promptness, orderId, onOrderChange, onOpenRecord }) {
+export default function GatewayPanel({
+  issues = [],
+  promptness,
+  orderId,
+  onOrderChange,
+  onOpenRecord,
+  record = {},
+  extracts = [],
+  savedByIssue = {},
+  historyByIssue = {},
+  onSaveApproach,
+}) {
+  const ceiling = ceilingLine(
+    issues.map((issue) => ({
+      label: issue.title,
+      evidence: { rating: issue.rating },
+      next_step: issue.next,
+    }))
+  );
+
   return (
     <Card className="shadow-md" id="gateway">
       <CardHeader>
         <CardTitle className="text-base">Gateway issues</CardTitle>
         <CardDescription>
-          Seven issues, each answered from the record. {INDICATIVE}
+          Seven issues, each with an Evidence rating and an Argument rating. {INDICATIVE}
         </CardDescription>
+        {ceiling && (
+          <p className="mt-1 flex items-start gap-1 rounded border border-slate-300 bg-slate-50 p-2 text-[11px] text-slate-800">
+            <Gauge className="h-3 w-3 mt-0.5 flex-shrink-0" />
+            {ceiling}
+          </p>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-3">
@@ -111,6 +140,17 @@ export default function GatewayPanel({ issues = [], promptness, orderId, onOrder
                   Stored extract at paragraph {issue.authority.paragraph_ref || 'not recorded'}: “{issue.authority.quote}”
                 </p>
               )}
+
+              <IssueApproachPanel
+                issue={issue}
+                approaches={approachesFor(issue, record, extracts)}
+                record={record}
+                extracts={extracts}
+                saved={savedByIssue[issue.id] || null}
+                history={historyByIssue[issue.id] || []}
+                onChange={onSaveApproach}
+                onOpenRecord={onOpenRecord}
+              />
             </div>
           );
         })}

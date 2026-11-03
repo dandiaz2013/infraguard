@@ -5,9 +5,6 @@ import { caseFileDocuments } from '../../shared/caseFile.ts';
 const DISCLAIMER =
   'Draft for review. Check every authority against the official judgment before filing. Not legal advice.';
 
-const MAX_DOCUMENTS = 20;
-const MAX_DOC_CHARS = 12000;
-const MAX_TOTAL_CHARS = 50000;
 const POSITIONS = ['Claimant', 'Defendant', 'Appellant', 'Respondent'];
 
 const SCHEMA = {
@@ -55,17 +52,14 @@ function authorityBlock(record) {
   ].join('\n');
 }
 
+// No document limit and no per-document character limit: the whole case file is sent.
 function buildCorpus(files) {
-  let total = 0;
-  const blocks = [];
-  for (const file of files) {
-    if (total >= MAX_TOTAL_CHARS) break;
-    const room = Math.min(MAX_DOC_CHARS, MAX_TOTAL_CHARS - total);
-    const text = file.text.slice(0, room);
-    total += text.length;
-    blocks.push(`### File: ${file.file_name}\nCategory: ${file.category || 'Document'}\n"""\n${text}\n"""`);
-  }
-  return blocks.join('\n\n');
+  return files
+    .map(
+      (file) =>
+        `### File: ${file.file_name}\nCategory: ${file.category || 'Document'}\n"""\n${file.text}\n"""`
+    )
+    .join('\n\n');
 }
 
 function buildMarkdown(matter, position, result) {
@@ -126,9 +120,7 @@ export default async function (req) {
     if (!matter) return Response.json({ error: 'Matter not found' }, { status: 404 });
 
     const files = await caseFileDocuments(base44, matterId);
-    const readable = files
-      .filter((file) => typeof file.text === 'string' && file.text.trim())
-      .slice(0, MAX_DOCUMENTS);
+    const readable = files.filter((file) => typeof file.text === 'string' && file.text.trim());
     if (readable.length === 0) {
       return Response.json({ error: 'Upload the matter documents first.' }, { status: 400 });
     }

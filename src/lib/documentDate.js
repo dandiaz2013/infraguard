@@ -96,12 +96,12 @@ function statementOfTruthDate(text) {
   );
 }
 
+// Only a signature or date line counts, never a date mentioned in the body.
 function signatureDate(text) {
   const tail = String(text || '').slice(-2500);
   return (
-    dateMatch(new RegExp(`(?:signed|signature)\\b[^\\n]{0,60}?${DATE_SRC}`, 'i'), tail) ||
-    dateMatch(new RegExp(`\\bdated\\s*:?\\s*${DATE_SRC}`, 'i'), tail) ||
-    dateMatch(new RegExp(`(?:date|dated)\\s*[^\\n]{0,30}?${DATE_SRC}`, 'i'), tail)
+    dateMatch(new RegExp(`(?:^|\\n)\\s*(?:signed|signature)\\b[^\\n]{0,60}?${DATE_SRC}`, 'i'), tail) ||
+    dateMatch(new RegExp(`(?:^|\\n)\\s*dated\\s*:?\\s*${DATE_SRC}`, 'i'), tail)
   );
 }
 
@@ -170,9 +170,7 @@ export function dateFromDocument(text = '', category = '') {
 
 // The line shown beside a detected date: it is never treated as confirmed on its own.
 export function detectedLabel(detection = {}) {
-  if (!detection.date) {
-    return `No date detected${detection.source ? ` (${detection.source})` : ''} - enter the date`;
-  }
+  if (!detection.date) return 'Date not found - enter it';
   const shown = formatDate(detection.date);
   if (detection.source && detection.source !== 'first date in the document') {
     return `Detected: ${shown} (${detection.source}) - Confirm / Change`;

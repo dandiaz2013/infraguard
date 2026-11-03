@@ -1,0 +1,94 @@
+{
+  "name": "UserField",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter the field belongs to"
+    },
+    "argument_id": {
+      "type": "string",
+      "description": "Argument version the field was written against"
+    },
+    "field_key": {
+      "type": "string",
+      "description": "Stable key, e.g. fact:2, point:1, gateway:route"
+    },
+    "group": {
+      "type": "string",
+      "description": "facts, points, misstatements, clauses, chronology or gateway"
+    },
+    "text": {
+      "type": "string",
+      "description": "What the user wrote; used in drafting with the user statement marker"
+    },
+    "source_document": {
+      "type": "string",
+      "description": "Document the user pointed to, if any"
+    },
+    "source_ref": {
+      "type": "string",
+      "description": "Paragraph or page reference the user gave, if any"
+    },
+    "added_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the wording was written"
+    }
+  },
+  "required": [
+    "matter_id",
+    "field_key",
+    "text"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

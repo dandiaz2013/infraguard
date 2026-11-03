@@ -1,0 +1,122 @@
+{
+  "name": "DraftSection",
+  "type": "object",
+  "properties": {
+    "matter_id": {
+      "type": "string",
+      "description": "Matter the section belongs to"
+    },
+    "argument_id": {
+      "type": "string",
+      "description": "Argument version the section was drafted for"
+    },
+    "section_key": {
+      "type": "string",
+      "description": "intro, issue:route, responses, relief or markers"
+    },
+    "title": {
+      "type": "string",
+      "description": "Section heading as it appears in the draft"
+    },
+    "order_index": {
+      "type": "number",
+      "description": "Position of the section in the assembled draft"
+    },
+    "content": {
+      "type": "string",
+      "description": "Section text in markdown"
+    },
+    "locked": {
+      "type": "boolean",
+      "default": false,
+      "description": "Locked sections are never overwritten by a redraft"
+    },
+    "word_count": {
+      "type": "number",
+      "description": "Words in the section"
+    },
+    "status": {
+      "type": "string",
+      "description": "Empty, Drafted, Redrafted or Failed"
+    },
+    "markers": {
+      "type": "array",
+      "description": "Open markers found in the section",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "verify": {
+      "type": "object",
+      "description": "Result of the reference and quotation check run in code"
+    },
+    "drafted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the section was last drafted"
+    }
+  },
+  "required": [
+    "matter_id",
+    "section_key",
+    "title"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

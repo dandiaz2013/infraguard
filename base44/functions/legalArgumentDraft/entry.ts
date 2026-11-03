@@ -19,6 +19,15 @@ function buildExpansions(expansions: Record<string, string> | undefined) {
     .join('');
 }
 
+// Wording the user supplied. It is used, and it keeps its marker, so it is never
+// read as something in the documents.
+function buildUserStatements(statements: Record<string, string>[]) {
+  if (!Array.isArray(statements) || statements.length === 0) return '';
+  return `\n\n## STATEMENTS BY THE USER - no document reference, keep the marker\n${statements
+    .map((entry) => `- ${entry.text}`)
+    .join('\n')}`;
+}
+
 function buildAuthorities(authorities: Record<string, string>[]) {
   if (authorities.length === 0) return '';
   return `\n\nRelevant Legal Authorities:\n${authorities
@@ -74,7 +83,10 @@ function buildGatewayIssues(issues: Record<string, any>[], promptnessNote: strin
     const theirs = issue.their_answer
       ? `theirs: "${issue.their_answer.quote}" (${issue.their_answer.document_name}, ${issue.their_answer.ref})`
       : 'theirs: nothing in the record';
-    return `ISSUE ${issue.number}: ${issue.title}\n  Question: ${issue.ask}\n  ${ours}\n  ${theirs}\n  Gap: ${issue.gap}\n  Next step: ${issue.next_step}`;
+    const approach = [issue.approach, issue.explanation].filter(Boolean).join(' — ');
+    return `ISSUE ${issue.number}: ${issue.title}\n  Question: ${issue.ask}\n  ${ours}\n  ${theirs}\n  Gap: ${issue.gap}\n  Next step: ${issue.next_step}${
+      approach ? `\n  Approach chosen and the lawyer's explanation: ${approach}` : ''
+    }${issue.evidence_rating ? `\n  Evidence: ${issue.evidence_rating}${issue.argument_rating ? `, Argument: ${issue.argument_rating}` : ''}` : ''}`;
   });
   return `\n\n## THE SEVEN GATEWAY ISSUES - build the argument around these, in this order\n${lines.join('\n\n')}${
     promptnessNote ? `\n\nPROMPTNESS (measured from the record): ${promptnessNote}` : ''
@@ -88,7 +100,7 @@ function buildDocuments(documents: Record<string, unknown>[]) {
       const linkedTo = Array.isArray(doc.linked_to) && doc.linked_to.length > 0
         ? ` (Linked to: ${(doc.linked_to as string[]).join(', ')})`
         : '';
-      const content = typeof doc.content === 'string' ? doc.content.slice(0, 5000) : '';
+      const content = typeof doc.content === 'string' ? doc.content : '';
       const id = doc.id ? ` [document id: ${doc.id}]` : '';
       return `### Document ${idx + 1}: ${doc.name || 'Untitled'}${id}${linkedTo}\n${content}`;
     })
@@ -113,12 +125,13 @@ Deno.serve(async (req) => {
     const matterType = typeof body.matterType === 'string' ? body.matterType : 'N/A';
     const issueTitle = typeof body.issueTitle === 'string' ? body.issueTitle.trim() : '';
     const authorities = Array.isArray(body.authorities) ? body.authorities.slice(0, 40) : [];
-    const documents = Array.isArray(body.documents) ? body.documents.slice(0, 10) : [];
+    const documents = Array.isArray(body.documents) ? body.documents : [];
     const mainAuthorities = Array.isArray(body.main_authorities) ? body.main_authorities.slice(0, 20) : [];
     const questionAnswers = Array.isArray(body.question_answers) ? body.question_answers.slice(0, 30) : [];
     const ourPoints = Array.isArray(body.our_points) ? body.our_points.slice(0, 40) : [];
     const contractClauses = Array.isArray(body.contract_clauses) ? body.contract_clauses.slice(0, 30) : [];
     const misstatements = Array.isArray(body.misstatements) ? body.misstatements.slice(0, 30) : [];
+    const userStatements = Array.isArray(body.user_statements) ? body.user_statements.slice(0, 60) : [];
     const legalTests = Array.isArray(body.legal_tests) ? body.legal_tests.slice(0, 4) : [];
     const registerItems = Array.isArray(body.register_items) ? body.register_items.slice(0, 40) : [];
     const gatewayIssues = Array.isArray(body.gateway) ? body.gateway.slice(0, 7) : [];
@@ -142,7 +155,7 @@ YOU MUST:
 ## Core Fact Pattern (Auto-Populated from Matter)
 ${factPattern}
 
-${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}${buildLegalTests(legalTests)}${buildRegister(registerItems)}${buildGatewayIssues(gatewayIssues, promptnessNote)}
+${expansions ? `## Fact Pattern Expansion (User-Provided Detail)\n${expansions.trim()}` : ''}${issueContext}${buildAuthorities(authorities)}${buildMainAuthorityBlock(mainAuthorities)}${buildDocuments(documents)}${buildAnswers(questionAnswers)}${buildOurPoints(ourPoints)}${buildClauses(contractClauses)}${buildMisstatements(misstatements)}${buildUserStatements(userStatements)}${buildLegalTests(legalTests)}${buildRegister(registerItems)}${buildGatewayIssues(gatewayIssues, promptnessNote)}
 
 ## Instructions to AI
 ${MAIN_AUTHORITY_RULES}

@@ -136,7 +136,10 @@ export const CASE_LAW_TEXT = [
   'Rolled Steel Products (Holdings) Ltd v British Steel Corporation [1986] Ch 246.',
   'Rex v Smith [2009] EWHC 339 (Ch) at [12].',
   'Brown v Green [2009] EWHC 339 Ch at [7].',
-  'Adams v Wall [1992] 4 All ER 363 and Davy v Mott [2006] 1 WLR 1945.'
+  'Adams v Wall [1992] 4 All ER 363 and Davy v Mott [2006] 1 WLR 1945.',
+  'Royal Bank of Scotland International Ltd v JP SPC 4 [2022] UKSC 50.',
+  'R (Miller) v Secretary of State for Exiting the European Union [2017] UKSC 5.',
+  'Philipp v Barclays Bank UK plc [2023] 3 WLR 456.'
 ].join('\n');
 
 // Party left blank where the document must be detected rather than assumed.
