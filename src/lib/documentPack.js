@@ -35,8 +35,9 @@ function termsOf(value) {
   );
 }
 
-// Categories whose paragraphs always go in: the application notice and the statements.
-const ALWAYS = { 'Application notices': 5, 'Witness statements': 4 };
+// Categories whose paragraphs always go in: the application notice, the statements and
+// the transcript (delay and knowledge are answered from it).
+const ALWAYS = { 'Application notices': 5, 'Witness statements': 4, Transcripts: 3 };
 
 function scoreOf(segment, terms) {
   if (!terms.size) return 0;
@@ -96,7 +97,7 @@ export function pickParagraphs({
     const byId = forced.has(keyOf(segment.document_id, segment.ref));
     const baseline = ALWAYS[segment.category] || 0;
     const score = scoreOf(segment, terms);
-    const wanted = byName || byId || baseline >= 4 || score >= 2;
+    const wanted = byName || byId || baseline >= 3 || score >= 2;
     if (!wanted) return;
 
     const used = perDoc[segment.document_id] || 0;
@@ -114,7 +115,7 @@ export function pickParagraphs({
       role: segment.role || '',
       ref: segment.ref,
       text,
-      why: byName || byId ? 'cited by the argument' : baseline >= 4 ? segment.category : 'matches the gateway issues',
+      why: byName || byId ? 'cited by the argument' : baseline >= 3 ? segment.category : 'matches the gateway issues',
     });
   });
 

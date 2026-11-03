@@ -104,18 +104,24 @@ export function reviewItems(text, documents = [], extracts = [], { variation = f
 
   source.split(/\n\s*\n/).forEach((block) => {
     const clean = block.trim();
-    if (clean.length < 90) return;
+    const prose = /\b(?:para|paragraph)\s+\d{1,3}\b/i.test(clean);
+    if (!prose && clean.length < 90) return;
     if (clean.startsWith('#') || clean.startsWith('|')) return;
     if (clean.includes('{{DOC:')) return;
     if (USER_STATEMENT.test(clean)) return;
     MARKER.lastIndex = 0;
     if (MARKER.test(clean)) return;
-    if (!(/\b(?:1[89]\d{2}|20\d{2})\b/.test(clean) || /\b(?:order|judgment|hearing|served|filed)\b/i.test(clean))) return;
+    const proseCite = prose;
+    const factual =
+      /\b(?:1[89]\d{2}|20\d{2})\b/.test(clean) || /\b(?:order|judgment|hearing|served|filed)\b/i.test(clean);
+    if (!proseCite && !factual) return;
     items.push({
       kind: 'unreferenced',
       passage: clip(clean, 320),
-      problem: 'A statement of fact with no {{DOC}} reference.',
-      fix: 'Add the document id and paragraph: {{DOC:<document id>|para N}}.',
+      problem: proseCite
+        ? 'A paragraph is cited in prose. Only the {{DOC}} form points at the record.'
+        : 'A statement of fact with no {{DOC}} reference.',
+      fix: 'Use the document id and paragraph: {{DOC:<document id>|para N}}.',
       section: 'A statement of fact',
     });
   });

@@ -11,7 +11,8 @@ const NAMED = [
   /order of\s+(?:Deputy Master|Master|District Judge|HHJ|Recorder|Judge)\s+[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+)?[^.\n]{0,24}?\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}/i,
   /(?:order|judgment)\s+(?:dated|of)\s+\d{1,2}(?:st|nd|rd|th)?\s+[A-Z][a-z]+\s+\d{4}/i,
 ];
-const ASKS = /[^.\n]*\b(?:applies?|applying|seeks?|asks?|requests?)\b[^.\n]*/i;
+// The whole line: a full stop inside "CPR 3.1(7)" must not cut the sentence short.
+const ASKS = /[^\n]*\b(?:applies?|applying|seeks?|asks?|requests?)\b[^\n]*/i;
 
 // Orders and judgments in the case file, with the date read from the document itself.
 export function decisionDocuments(documents = []) {
@@ -43,7 +44,7 @@ export function applicationDetails({ documents = [], orderId = '', summary = '' 
   const body = String(notice?.text || '');
 
   const rule = (body.match(RULE) || [])[0] || '';
-  const asks = ((body.match(ASKS) || [])[0] || '').replace(/\s+/g, ' ').trim();
+  const asks = ((body.match(ASKS) || [])[0] || '').replace(/\s+/g, ' ').trim().slice(0, 400);
   const named = NAMED.map((pattern) => (body.match(pattern) || [])[0] || '').find(Boolean) || '';
   const namedDate = named ? toIsoDate(named) : '';
   const namedJudge = (named.match(JUDGE) || [])[0] || '';
